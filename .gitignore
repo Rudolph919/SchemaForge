@@ -1,0 +1,42 @@
+# .NET
+bin/
+obj/
+*.user
+*.suo
+.vs/
+
+# Rider / JetBrains
+.idea/
+
+# VS Code
+.vscode/*
+!.vscode/extensions.json
+
+# Node / Vue frontend
+node_modules/
+dist/
+dist-ssr/
+*.local
+.vite/
+
+# Environment & secrets
+.env
+.env.*
+!.env.example
+appsettings.*.local.json
+
+# Logs
+logs/
+*.log
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Test / coverage output
+coverage/
+TestResults/
+*.trx
+
+# Docker
+.docker/
