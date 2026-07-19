@@ -75,6 +75,14 @@ public sealed class OrganizationMembershipRepository(SchemaForgeDbContext dbCont
         dbContext.OrganizationMemberships.AnyAsync(
             m => m.OrganizationId == organizationId && m.UserId == userId, cancellationToken);
 
+    public Task<bool> IsActiveMemberAsync(
+        Guid organizationId, Guid userId, CancellationToken cancellationToken) =>
+        dbContext.OrganizationMemberships.AnyAsync(
+            m => m.OrganizationId == organizationId
+                && m.UserId == userId
+                && m.Status == MembershipStatus.Active,
+            cancellationToken);
+
     public async Task<IReadOnlyList<OrganizationMemberSummary>> GetAllForCurrentOrganizationAsync(
         CancellationToken cancellationToken) =>
         await dbContext.OrganizationMemberships
