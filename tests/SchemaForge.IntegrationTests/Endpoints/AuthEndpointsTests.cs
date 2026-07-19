@@ -1,7 +1,9 @@
 using System.Net;
+using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using FluentAssertions;
 using SchemaForge.Contracts.V1.Auth;
+using SchemaForge.Contracts.V1.Organizations;
 using SchemaForge.IntegrationTests.Fixtures;
 
 namespace SchemaForge.IntegrationTests.Endpoints;
@@ -28,8 +30,12 @@ public sealed class AuthEndpointsTests : IAsyncLifetime
         await _factory.DisposeAsync();
     }
 
+    // Organization name carries a guid suffix, same as the email - Organization.Create
+    // uniqueifies the slug on collision (correct production behavior), which made a fixed "Test
+    // Org" name across this growing test class an increasingly real source of flaky slug
+    // collisions between unrelated tests, not just a theoretical one.
     private static RegisterRequest NewRegisterRequest() => new(
-        $"user-{Guid.NewGuid()}@example.com", "correct-horse-battery", "Test User", "Test Org");
+        $"user-{Guid.NewGuid()}@example.com", "correct-horse-battery", "Test User", $"Test Org {Guid.NewGuid():N}");
 
     [Fact]
     public async Task Register_with_valid_data_returns_ok_with_user_and_organization_ids()
@@ -41,7 +47,7 @@ public sealed class AuthEndpointsTests : IAsyncLifetime
         var body = await response.Content.ReadFromJsonAsync<RegisterResponse>();
         body!.UserId.Should().NotBeEmpty();
         body.OrganizationId.Should().NotBeEmpty();
-        body.OrganizationSlug.Should().Be("test-org");
+        body.OrganizationSlug.Should().StartWith("test-org-");
     }
 
     [Fact]
@@ -100,5 +106,79 @@ public sealed class AuthEndpointsTests : IAsyncLifetime
         // Same body for both - revealing which one it was would let an attacker enumerate
         // registered emails (Application layer's deliberate design, asserted here at the wire).
         wrongPasswordBody.Should().Be(nonexistentEmailBody);
+    }
+
+    [Fact]
+    public async Task Switching_to_an_organization_the_user_actively_belongs_to_issues_a_token_for_it()
+    {
+        var ownerRequest = NewRegisterRequest();
+        var ownerRegistration = await RegisterAndReadAsync(ownerRequest);
+        var ownerLogin = await LoginAsync(ownerRequest.Email, ownerRequest.Password);
+
+        var memberRequest = NewRegisterRequest();
+        await RegisterAndReadAsync(memberRequest);
+        var memberLogin = await LoginAsync(memberRequest.Email, memberRequest.Password);
+
+        var invite = await InviteAsync(ownerLogin.AccessToken, memberRequest.Email);
+        await AcceptAsync(memberLogin.AccessToken, invite.MembershipId);
+
+        var switchResponse = await SendAuthorizedAsync(
+            "/api/v1/auth/switch-organization", memberLogin.AccessToken,
+            new SwitchOrganizationRequest(ownerRegistration.OrganizationId));
+
+        switchResponse.StatusCode.Should().Be(HttpStatusCode.OK);
+        var switched = await switchResponse.Content.ReadFromJsonAsync<SwitchOrganizationResponse>();
+        switched!.OrganizationId.Should().Be(ownerRegistration.OrganizationId);
+    }
+
+    [Fact]
+    public async Task Switching_to_an_organization_the_user_does_not_belong_to_is_forbidden()
+    {
+        var ownerRequest = NewRegisterRequest();
+        var ownerRegistration = await RegisterAndReadAsync(ownerRequest);
+
+        var outsiderRequest = NewRegisterRequest();
+        await RegisterAndReadAsync(outsiderRequest);
+        var outsiderLogin = await LoginAsync(outsiderRequest.Email, outsiderRequest.Password);
+
+        var switchResponse = await SendAuthorizedAsync(
+            "/api/v1/auth/switch-organization", outsiderLogin.AccessToken,
+            new SwitchOrganizationRequest(ownerRegistration.OrganizationId));
+
+        switchResponse.StatusCode.Should().Be(HttpStatusCode.Forbidden);
+    }
+
+    private async Task<RegisterResponse> RegisterAndReadAsync(RegisterRequest request)
+    {
+        var response = await _client.PostAsJsonAsync("/api/v1/auth/register", request);
+        return (await response.Content.ReadFromJsonAsync<RegisterResponse>())!;
+    }
+
+    private async Task<LoginResponse> LoginAsync(string email, string password)
+    {
+        var response = await _client.PostAsJsonAsync("/api/v1/auth/login", new LoginRequest(email, password));
+        return (await response.Content.ReadFromJsonAsync<LoginResponse>())!;
+    }
+
+    private async Task<InviteMemberResponse> InviteAsync(string inviterToken, string inviteeEmail)
+    {
+        var response = await SendAuthorizedAsync("/api/v1/organizations/members/invite", inviterToken,
+            new InviteMemberRequest(inviteeEmail, OrganizationRole.Member));
+        return (await response.Content.ReadFromJsonAsync<InviteMemberResponse>())!;
+    }
+
+    private async Task AcceptAsync(string inviteeToken, Guid membershipId) =>
+        await SendAuthorizedAsync($"/api/v1/organizations/members/{membershipId}/accept", inviteeToken, body: null);
+
+    private async Task<HttpResponseMessage> SendAuthorizedAsync(string url, string token, object? body)
+    {
+        var request = new HttpRequestMessage(HttpMethod.Post, url);
+        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
+        if (body is not null)
+        {
+            request.Content = JsonContent.Create(body);
+        }
+
+        return await _client.SendAsync(request);
     }
 }

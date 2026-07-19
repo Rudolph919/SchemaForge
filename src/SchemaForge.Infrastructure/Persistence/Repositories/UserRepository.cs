@@ -13,6 +13,9 @@ public sealed class UserRepository(SchemaForgeDbContext dbContext) : IUserReposi
     public Task<User?> GetByEmailAsync(EmailAddress email, CancellationToken cancellationToken) =>
         dbContext.Users.SingleOrDefaultAsync(u => u.Email == email, cancellationToken);
 
+    public Task<User?> GetByIdAsync(Guid id, CancellationToken cancellationToken) =>
+        dbContext.Users.SingleOrDefaultAsync(u => u.Id == id, cancellationToken);
+
     public async Task AddAsync(User user, CancellationToken cancellationToken) =>
         await dbContext.Users.AddAsync(user, cancellationToken);
 }

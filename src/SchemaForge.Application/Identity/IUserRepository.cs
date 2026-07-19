@@ -9,5 +9,7 @@ public interface IUserRepository
 
     Task<User?> GetByEmailAsync(EmailAddress email, CancellationToken cancellationToken);
 
+    Task<User?> GetByIdAsync(Guid id, CancellationToken cancellationToken);
+
     Task AddAsync(User user, CancellationToken cancellationToken);
 }
