@@ -38,8 +38,12 @@ services:
       MINIO_ROOT_USER: ${MINIO_ROOT_USER:-schemaforge}
       MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-changeme-local-only}
     ports:
-      - "9000:9000"
-      - "9001:9001"
+      # Host-side ports only - container-to-container traffic (the api service's
+      # Storage__Endpoint below) always uses the internal docker network on 9000/9001
+      # regardless of this mapping. Remapped off the default 9000/9001 because this dev
+      # machine already has an unrelated local process bound to host port 9000.
+      - "9002:9000"
+      - "9003:9001"
     volumes:
       - minio-data:/data
     healthcheck:
