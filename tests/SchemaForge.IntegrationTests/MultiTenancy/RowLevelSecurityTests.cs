@@ -4,6 +4,7 @@ using Microsoft.EntityFrameworkCore;
 using Npgsql;
 using SchemaForge.Application.Common.Abstractions;
 using SchemaForge.Contracts.V1.Auth;
+using SchemaForge.Domain.Workspaces;
 using SchemaForge.Infrastructure.Persistence;
 using SchemaForge.Infrastructure.Persistence.Interceptors;
 using SchemaForge.IntegrationTests.Fixtures;
@@ -85,6 +86,26 @@ public sealed class RowLevelSecurityTests(PostgresFixture postgres) : IAsyncLife
     }
 
     [Fact]
+    public async Task RLS_blocks_a_cross_tenant_project_read_even_with_the_EF_Core_filter_explicitly_bypassed()
+    {
+        var orgA = await RegisterAsync("Org A");
+        var orgB = await RegisterAsync("Org B");
+
+        await CreateProjectAsync(orgA.OrganizationId, "Org A's Project");
+
+        var tenantContext = new FixedTenantContext(orgB.OrganizationId);
+        var options = new DbContextOptionsBuilder<SchemaForgeDbContext>()
+            .UseNpgsql(postgres.AppConnectionString)
+            .AddInterceptors(new TenantSessionConnectionInterceptor(tenantContext))
+            .Options;
+        await using var dbContext = new SchemaForgeDbContext(options, tenantContext);
+
+        var visible = await dbContext.Projects.IgnoreQueryFilters().Select(p => p.OrganizationId).ToListAsync();
+
+        visible.Should().NotContain(orgA.OrganizationId);
+    }
+
+    [Fact]
     public async Task RLS_allows_a_raw_SQL_write_to_the_matching_tenants_own_row()
     {
         var orgA = await RegisterAsync("Org A");
@@ -110,6 +131,19 @@ public sealed class RowLevelSecurityTests(PostgresFixture postgres) : IAsyncLife
 
         var response = await _client.PostAsJsonAsync("/api/v1/auth/register", request);
         return (await response.Content.ReadFromJsonAsync<RegisterResponse>())!;
+    }
+
+    private async Task CreateProjectAsync(Guid organizationId, string name)
+    {
+        var tenantContext = new FixedTenantContext(organizationId);
+        var options = new DbContextOptionsBuilder<SchemaForgeDbContext>()
+            .UseNpgsql(postgres.AppConnectionString)
+            .AddInterceptors(new TenantSessionConnectionInterceptor(tenantContext))
+            .Options;
+
+        await using var dbContext = new SchemaForgeDbContext(options, tenantContext);
+        dbContext.Projects.Add(Project.Create(organizationId, name));
+        await dbContext.SaveChangesAsync();
     }
 
     private static async Task SetTenantSessionVariableAsync(NpgsqlConnection connection, Guid tenantId)

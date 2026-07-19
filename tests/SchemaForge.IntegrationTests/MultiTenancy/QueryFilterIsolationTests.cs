@@ -3,6 +3,7 @@ using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
 using SchemaForge.Application.Common.Abstractions;
 using SchemaForge.Contracts.V1.Auth;
+using SchemaForge.Domain.Workspaces;
 using SchemaForge.Infrastructure.Persistence;
 using SchemaForge.Infrastructure.Persistence.Interceptors;
 using SchemaForge.IntegrationTests.Fixtures;
@@ -52,6 +53,21 @@ public sealed class QueryFilterIsolationTests(PostgresFixture postgres) : IAsync
         membershipsVisibleWithNoTenant.Should().BeEmpty();
     }
 
+    // Projects/Teams/SourceDocuments all share the exact same HasQueryFilter shape as
+    // OrganizationMembership (Step 5 §3) - this test exists to prove that shared shape is
+    // actually wired up for a second table, not just asserted by inspection.
+    [Fact]
+    public async Task A_tenant_scoped_DbContext_never_sees_another_organizations_project()
+    {
+        var orgA = await RegisterAsync("Org A");
+        var orgB = await RegisterAsync("Org B");
+        await CreateProjectAsync(orgA.OrganizationId, "Org A's Project");
+
+        var projectsVisibleToOrgB = await QueryProjectOrganizationIdsAsync(orgB.OrganizationId);
+
+        projectsVisibleToOrgB.Should().NotContain(orgA.OrganizationId);
+    }
+
     private async Task<RegisterResponse> RegisterAsync(string organizationName)
     {
         var request = new RegisterRequest(
@@ -77,6 +93,31 @@ public sealed class QueryFilterIsolationTests(PostgresFixture postgres) : IAsync
         await using var dbContext = new SchemaForgeDbContext(options, tenantContext);
 
         return await dbContext.OrganizationMemberships.Select(m => m.OrganizationId).ToListAsync();
+    }
+
+    private async Task CreateProjectAsync(Guid organizationId, string name)
+    {
+        var tenantContext = new FixedTenantContext(organizationId);
+        var options = new DbContextOptionsBuilder<SchemaForgeDbContext>()
+            .UseNpgsql(postgres.AppConnectionString)
+            .AddInterceptors(new TenantSessionConnectionInterceptor(tenantContext))
+            .Options;
+
+        await using var dbContext = new SchemaForgeDbContext(options, tenantContext);
+        dbContext.Projects.Add(Project.Create(organizationId, name));
+        await dbContext.SaveChangesAsync();
+    }
+
+    private async Task<List<Guid>> QueryProjectOrganizationIdsAsync(Guid? tenantId)
+    {
+        var tenantContext = new FixedTenantContext(tenantId);
+        var options = new DbContextOptionsBuilder<SchemaForgeDbContext>()
+            .UseNpgsql(postgres.AppConnectionString)
+            .AddInterceptors(new TenantSessionConnectionInterceptor(tenantContext))
+            .Options;
+
+        await using var dbContext = new SchemaForgeDbContext(options, tenantContext);
+        return await dbContext.Projects.Select(p => p.OrganizationId).ToListAsync();
     }
 
     private sealed class FixedTenantContext(Guid? tenantId) : ITenantContext
