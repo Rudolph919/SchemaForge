@@ -243,6 +243,38 @@ public class SchemaVersionTests
     }
 
     [Fact]
+    public void MoveNode_updates_the_nodes_order()
+    {
+        var version = NewDraft();
+        var nodeId = version.AddObjectProperty(version.RootNode.Id, "amount", NodeKind.Number).Value;
+
+        var result = version.MoveNode(nodeId, 5);
+
+        result.IsSuccess.Should().BeTrue();
+        version.RootNode.Properties.Single(n => n.Id == nodeId).Order.Should().Be(5);
+    }
+
+    [Fact]
+    public void MoveNode_cannot_move_the_root_node()
+    {
+        var version = NewDraft();
+
+        var result = version.MoveNode(version.RootNode.Id, 1);
+
+        result.IsFailure.Should().BeTrue();
+    }
+
+    [Fact]
+    public void MoveNode_fails_when_the_node_does_not_exist()
+    {
+        var version = NewDraft();
+
+        var result = version.MoveNode(Guid.NewGuid(), 1);
+
+        result.IsFailure.Should().BeTrue();
+    }
+
+    [Fact]
     public void RemoveNode_removes_a_nested_property_and_raises_an_event()
     {
         var version = NewDraft();
@@ -347,6 +379,7 @@ public class SchemaVersionTests
 
         version.AddObjectProperty(version.RootNode.Id, "another", NodeKind.String).IsFailure.Should().BeTrue();
         version.UpdateNode(nodeId, SchemaNodeContent.Empty(NodeKind.Number)).IsFailure.Should().BeTrue();
+        version.MoveNode(nodeId, 5).IsFailure.Should().BeTrue();
         version.RemoveNode(nodeId).IsFailure.Should().BeTrue();
         version.AddLocalDefinition("Category", NodeKind.Object).IsFailure.Should().BeTrue();
     }

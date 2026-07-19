@@ -40,6 +40,7 @@ public static class InfrastructureServiceCollectionExtensions
         services.AddScoped<IProjectRepository, ProjectRepository>();
         services.AddScoped<ISourceDocumentRepository, SourceDocumentRepository>();
         services.AddScoped<ISchemaDefinitionRepository, SchemaDefinitionRepository>();
+        services.AddScoped<ISchemaVersionRepository, SchemaVersionRepository>();
         services.AddScoped<IUnitOfWork, UnitOfWork>();
 
         services.AddScoped<IPasswordHasher, IdentityPasswordHasher>();
