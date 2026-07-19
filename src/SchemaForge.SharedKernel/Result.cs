@@ -1,8 +1,17 @@
 namespace SchemaForge.SharedKernel;
 
+// Lets MediatR pipeline behaviors (ValidationBehavior, TransactionBehavior) work generically
+// against either Result or Result<T> - they can't share a common base (structs can't inherit),
+// so this is the seam that lets a behavior check IsSuccess/Error without knowing which one it has.
+public interface IResult
+{
+    bool IsSuccess { get; }
+    Error Error { get; }
+}
+
 // Result<T> can't inherit Result (structs don't support inheritance), so the two are independent
 // types with matching shape rather than the class hierarchy Step 4 sketched illustratively.
-public readonly record struct Result
+public readonly record struct Result : IResult
 {
     public bool IsSuccess { get; }
 
@@ -26,7 +35,7 @@ public readonly record struct Result
     public static Result Failure(Error error) => new(false, error);
 }
 
-public readonly record struct Result<TValue>
+public readonly record struct Result<TValue> : IResult
 {
     private readonly TValue? _value;
 
