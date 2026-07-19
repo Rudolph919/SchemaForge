@@ -5,7 +5,9 @@ using SchemaForge.SharedKernel;
 namespace SchemaForge.Application.Organizations.Commands.AcceptInvitation;
 
 public sealed class AcceptOrganizationInvitationHandler(
-    IOrganizationMembershipRepository membershipRepository, ICurrentUserContext currentUserContext)
+    IOrganizationMembershipRepository membershipRepository,
+    ICurrentUserContext currentUserContext,
+    ITenantContext tenantContext)
     : IRequestHandler<AcceptOrganizationInvitationCommand, Result>
 {
     public async Task<Result> Handle(AcceptOrganizationInvitationCommand request, CancellationToken cancellationToken)
@@ -22,6 +24,14 @@ public sealed class AcceptOrganizationInvitationHandler(
         {
             return Result.Failure(Error.NotFound("OrganizationMembership.NotFound", "No such invitation."));
         }
+
+        // The caller's ambient tenant (from their JWT's org_id) is whatever org they're already
+        // active in - not necessarily this invitation's org, which is exactly the case an invite
+        // exists to bridge. Same bootstrapping need as Registration (see ITenantContext): without
+        // this, the RLS policy's WITH CHECK clause (deliberately not given the self-lookup
+        // exception - see the AllowSelfMembershipLookupForLogin migration) rejects the UPDATE
+        // outright, since it only permits organization_id = app.current_tenant_id.
+        tenantContext.SetTenant(membership.OrganizationId);
 
         return membership.Accept();
     }
