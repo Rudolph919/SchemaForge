@@ -1,0 +1,9 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <ItemGroup>
+    <ProjectReference Include="..\SchemaForge.Application\SchemaForge.Application.csproj" />
+    <ProjectReference Include="..\SchemaForge.Domain\SchemaForge.Domain.csproj" />
+    <ProjectReference Include="..\SchemaForge.SharedKernel\SchemaForge.SharedKernel.csproj" />
+  </ItemGroup>
+
+</Project>

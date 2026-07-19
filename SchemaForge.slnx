@@ -1,0 +1,15 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/SchemaForge.Api/SchemaForge.Api.csproj" />
+    <Project Path="src/SchemaForge.Application/SchemaForge.Application.csproj" />
+    <Project Path="src/SchemaForge.Contracts/SchemaForge.Contracts.csproj" />
+    <Project Path="src/SchemaForge.Domain/SchemaForge.Domain.csproj" />
+    <Project Path="src/SchemaForge.Infrastructure/SchemaForge.Infrastructure.csproj" />
+    <Project Path="src/SchemaForge.SharedKernel/SchemaForge.SharedKernel.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/SchemaForge.ArchitectureTests/SchemaForge.ArchitectureTests.csproj" />
+    <Project Path="tests/SchemaForge.IntegrationTests/SchemaForge.IntegrationTests.csproj" />
+    <Project Path="tests/SchemaForge.UnitTests/SchemaForge.UnitTests.csproj" />
+  </Folder>
+</Solution>
