@@ -29,4 +29,8 @@ public sealed class LocalDefinition : Entity<Guid>
 
         return new LocalDefinition(Guid.NewGuid(), name, SchemaNode.CreateEmpty(rootKind, null, 0));
     }
+
+    // Used only by Infrastructure's JSON converter - see SchemaNode.Rehydrate for why.
+    internal static LocalDefinition Rehydrate(Guid id, string name, SchemaNode rootNode) =>
+        new(id, name, rootNode);
 }
