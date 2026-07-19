@@ -1,26 +1,32 @@
 import { computed, ref } from 'vue'
 import { defineStore } from 'pinia'
 import { authApi } from '@/modules/auth/api/authApi'
+import { tokenStorage } from '@/shared/auth/tokenStorage'
+import { decodeAccessToken } from '@/shared/auth/jwt'
 import type { LoginRequest, RegisterRequest } from '@/types/auth'
 
-const ACCESS_TOKEN_STORAGE_KEY = 'schemaforge.accessToken'
+function claimsFromToken(token: string | null) {
+  if (token === null) return { userId: null, organizationId: null, displayName: null }
+  const claims = decodeAccessToken(token)
+  return { userId: claims.sub, organizationId: claims.org_id, displayName: claims.name }
+}
 
 // App-wide session state (Step 7 §6) - not module-scoped, since every module needs to know
-// "who's logged in and which organization are they acting as."
+// "who's logged in and which organization are they acting as." Only the raw token is persisted
+// to localStorage; userId/organizationId/displayName are always derived from its claims (not
+// tracked as separate mutable fields) so there's nothing to fall out of sync on a page reload,
+// where only the token string itself survives.
 export const useAuthStore = defineStore('auth', () => {
-  const accessToken = ref<string | null>(localStorage.getItem(ACCESS_TOKEN_STORAGE_KEY))
-  const userId = ref<string | null>(null)
-  const organizationId = ref<string | null>(null)
-  const displayName = ref<string | null>(null)
+  const accessToken = ref<string | null>(tokenStorage.get())
 
   const isAuthenticated = computed(() => accessToken.value !== null)
+  const userId = computed(() => claimsFromToken(accessToken.value).userId)
+  const organizationId = computed(() => claimsFromToken(accessToken.value).organizationId)
+  const displayName = computed(() => claimsFromToken(accessToken.value).displayName)
 
-  function setSession(token: string, user: string, organization: string, name: string) {
+  function setToken(token: string) {
     accessToken.value = token
-    userId.value = user
-    organizationId.value = organization
-    displayName.value = name
-    localStorage.setItem(ACCESS_TOKEN_STORAGE_KEY, token)
+    tokenStorage.set(token)
   }
 
   async function register(request: RegisterRequest) {
@@ -32,16 +38,28 @@ export const useAuthStore = defineStore('auth', () => {
 
   async function login(request: LoginRequest) {
     const response = await authApi.login(request)
-    setSession(response.accessToken, response.userId, response.organizationId, response.displayName)
+    setToken(response.accessToken)
+  }
+
+  async function switchOrganization(organizationId: string) {
+    const response = await authApi.switchOrganization({ organizationId })
+    setToken(response.accessToken)
   }
 
   function logout() {
     accessToken.value = null
-    userId.value = null
-    organizationId.value = null
-    displayName.value = null
-    localStorage.removeItem(ACCESS_TOKEN_STORAGE_KEY)
+    tokenStorage.clear()
   }
 
-  return { accessToken, userId, organizationId, displayName, isAuthenticated, register, login, logout }
+  return {
+    accessToken,
+    userId,
+    organizationId,
+    displayName,
+    isAuthenticated,
+    register,
+    login,
+    switchOrganization,
+    logout,
+  }
 })

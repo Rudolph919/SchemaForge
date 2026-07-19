@@ -26,9 +26,12 @@ export interface LoginResponse {
   displayName: string
 }
 
-export interface ProblemDetails {
-  title?: string
-  status?: number
-  detail?: string
-  errorCode?: string
+export interface SwitchOrganizationRequest {
+  organizationId: string
+}
+
+export interface SwitchOrganizationResponse {
+  accessToken: string
+  organizationId: string
+  displayName: string
 }
