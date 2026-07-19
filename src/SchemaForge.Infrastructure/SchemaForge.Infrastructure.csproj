@@ -1,9 +1,24 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
 
   <ItemGroup>
+    <!-- Gives access to Microsoft.AspNetCore.Identity.PasswordHasher<T> and IHttpContextAccessor
+         from the shared framework, without pulling the old netstandard2.0-era standalone NuGet
+         packages (which drag in a vulnerable transitive System.Security.Cryptography.Xml). -->
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
+  </ItemGroup>
+
+  <ItemGroup>
     <ProjectReference Include="..\SchemaForge.Application\SchemaForge.Application.csproj" />
     <ProjectReference Include="..\SchemaForge.Domain\SchemaForge.Domain.csproj" />
     <ProjectReference Include="..\SchemaForge.SharedKernel\SchemaForge.SharedKernel.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Design" Version="10.0.0">
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+      <PrivateAssets>all</PrivateAssets>
+    </PackageReference>
+    <PackageReference Include="Npgsql.EntityFrameworkCore.PostgreSQL" Version="10.0.0" />
   </ItemGroup>
 
 </Project>
