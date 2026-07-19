@@ -18,11 +18,14 @@ public static class InfrastructureServiceCollectionExtensions
         services.AddScoped<ITenantContext, HttpTenantContext>();
 
         services.AddSingleton<AuditableEntitySaveChangesInterceptor>();
+        services.AddScoped<TenantSessionConnectionInterceptor>();
         services.AddDbContext<SchemaForgeDbContext>((sp, options) =>
         {
             options
                 .UseNpgsql(configuration.GetConnectionString("Default"))
-                .AddInterceptors(sp.GetRequiredService<AuditableEntitySaveChangesInterceptor>());
+                .AddInterceptors(
+                    sp.GetRequiredService<AuditableEntitySaveChangesInterceptor>(),
+                    sp.GetRequiredService<TenantSessionConnectionInterceptor>());
         });
 
         services.AddScoped<IUserRepository, UserRepository>();
