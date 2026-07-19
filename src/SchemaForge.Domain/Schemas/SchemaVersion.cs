@@ -231,6 +231,32 @@ public sealed class SchemaVersion : TenantOwnedAggregateRoot<Guid>
         return Result.Success();
     }
 
+    // Reorder among existing siblings only (Step 6 §2.4's "move" endpoint) - not reparenting to
+    // a different node. Reparenting would mean detaching from one attachment point and
+    // reattaching at another while preserving the node's id/content, a materially riskier
+    // operation than resequencing a list; scoped out until a real need for it shows up.
+    public Result MoveNode(Guid nodeId, int newOrder)
+    {
+        var draftCheck = EnsureDraft();
+        if (draftCheck.IsFailure) return draftCheck;
+
+        if (nodeId == RootNode.Id)
+        {
+            return Result.Failure(Error.Validation("SchemaNode.CannotMoveRoot", "The root node cannot be reordered."));
+        }
+
+        var node = FindNode(nodeId);
+        if (node is null)
+        {
+            return Result.Failure(Error.NotFound("SchemaNode.NotFound", "No such node."));
+        }
+
+        node.Reorder(newOrder);
+        RaiseDomainEvent(new SchemaNodeUpdated(Id, nodeId));
+
+        return Result.Success();
+    }
+
     public Result RemoveNode(Guid nodeId)
     {
         var draftCheck = EnsureDraft();
