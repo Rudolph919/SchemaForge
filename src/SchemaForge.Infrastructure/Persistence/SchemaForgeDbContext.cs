@@ -2,6 +2,7 @@ using Microsoft.EntityFrameworkCore;
 using SchemaForge.Application.Common.Abstractions;
 using SchemaForge.Domain.Identity;
 using SchemaForge.Domain.Organizations;
+using SchemaForge.Domain.Schemas;
 using SchemaForge.Domain.Workspaces;
 
 namespace SchemaForge.Infrastructure.Persistence;
@@ -21,6 +22,8 @@ public sealed class SchemaForgeDbContext(
     public DbSet<Project> Projects => Set<Project>();
 
     public DbSet<SourceDocument> SourceDocuments => Set<SourceDocument>();
+
+    public DbSet<SchemaDefinition> SchemaDefinitions => Set<SchemaDefinition>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -43,6 +46,8 @@ public sealed class SchemaForgeDbContext(
         modelBuilder.Entity<Project>()
             .HasQueryFilter(p => p.OrganizationId == tenantContext.CurrentTenantId);
         modelBuilder.Entity<SourceDocument>()
+            .HasQueryFilter(d => d.OrganizationId == tenantContext.CurrentTenantId);
+        modelBuilder.Entity<SchemaDefinition>()
             .HasQueryFilter(d => d.OrganizationId == tenantContext.CurrentTenantId);
     }
 }
