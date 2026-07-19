@@ -157,8 +157,9 @@ SchemaForge.Infrastructure/
 ├── Caching/                     # ICacheService → Redis
 ├── Storage/                     # IFileStorage → local disk (dev) / MinIO (docker-compose) — never Azure/AWS-specific (Step 1 confirmed decision)
 ├── BackgroundJobs/
-│   ├── OutboxBackgroundService.cs   # the IHostedService worker (Step 1 §8)
-│   └── Handlers/                    # one handler per background_jobs.job_type, e.g. RunTestSuiteJobHandler
+│   ├── HangfireJobDispatcher.cs     # IJobDispatcher implementation, wraps Hangfire's IBackgroundJobClient (Step 1 §8)
+│   ├── HangfireConfiguration.cs     # storage setup, dashboard auth, retry/queue configuration
+│   └── Jobs/                        # one job class per background job type, e.g. RunTestSuiteJob.cs
 └── Ai/
     └── NullSchemaSuggestionProvider.cs   # no-op placeholder implementation of ISchemaSuggestionProvider — see Step 9
 

@@ -270,29 +270,9 @@ audit_log_entries (
 )
 ```
 
-### 4.7 Infrastructure: the outbox (Step 1 §8)
+### 4.7 Infrastructure: background jobs (Step 1 §8)
 
-```sql
-background_jobs (
-    id uuid primary key,
-    job_type text not null,
-    payload jsonb not null,
-    status text not null,                  -- 'pending' | 'processing' | 'completed' | 'failed'
-    attempts int not null default 0,
-    available_at timestamptz not null,     -- supports scheduled/retry-with-backoff jobs
-    locked_at timestamptz,
-    locked_by text,                        -- worker instance identifier, for lease-based dispatch
-    created_at timestamptz not null,
-    completed_at timestamptz
-)
-
--- the worker's dispatch query — a partial index keeps this cheap even with a large historical table
-create index ix_background_jobs_dispatch
-    on background_jobs (available_at)
-    where status = 'pending';
-```
-
-Not tenant-scoped by `organization_id` directly at the table level — the job `payload` carries whatever tenant context the specific job type needs, since jobs aren't queried or displayed to end users the way every other table here is.
+No hand-designed table here. Background job execution runs on **Hangfire** (`Hangfire.PostgreSql`), which manages its own storage — its own tables (`job`, `state`, `server`, ...), migrated automatically by the Hangfire package itself, not something this document specifies by hand. Kept in its own Postgres schema (`hangfire`, not `public`) for the same reason Step 8 §6 recommends schema-per-bounded-context namespacing generally — it's infrastructure machinery, not a SchemaForge domain table, and keeping it visibly separate says so.
 
 ---
 

@@ -65,7 +65,7 @@ registered as `IEnumerable<ISchemaExporter>` in DI and dispatched by matching `F
 Two seams are already fully designed by earlier confirmed decisions; nothing new here, just closing the loop on the "extension points" catalog:
 
 - **`IFileStorage`** (Step 1 §9): local disk today, MinIO in docker-compose — genuinely S3-API-compatible, so a later move to real AWS S3 (or an Azure Blob adapter behind the same interface) is a pure `Infrastructure/Storage/` swap, zero change above that layer.
-- **`IJobDispatcher`** (Step 1 §8): in-process outbox worker today; a real broker (RabbitMQ, SQS, Azure Service Bus) later is the same kind of swap, made concretely relevant by Step 8 §5's finding that Schema Testing — the job type actually running through this dispatcher — is the most plausible first thing to ever need it.
+- **`IJobDispatcher`** (Step 1 §8): backed by Hangfire today, which already gets us persisted, at-least-once job execution with retries and a dashboard — meaningfully reduces how urgent a "real broker" migration (RabbitMQ, SQS, Azure Service Bus) would ever be, since Hangfire itself supports scaling out to multiple worker processes against shared storage before a full message-broker migration is warranted. If that day ever comes, it's the same kind of Infrastructure-layer swap behind the same port, made concretely relevant by Step 8 §5's finding that Schema Testing — the job type actually running through this dispatcher — is the most plausible first thing to ever need it.
 
 ---
 

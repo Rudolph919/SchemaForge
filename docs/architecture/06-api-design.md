@@ -128,7 +128,7 @@ Mirrors §2.4 exactly — `/api/v1/organizations/{orgId}/components`, `/componen
 | POST / GET | `/api/v1/schemas/{schemaId}/test-suites` | Create / list Test Suites |
 | GET | `/api/v1/test-suites/{id}` | Read suite incl. cases |
 | POST / PATCH / DELETE | `/api/v1/test-suites/{id}/cases[/{caseId}]` | Manage `TestCase`s |
-| POST | `/api/v1/test-suites/{id}/run?targetVersionId={id}` | Dispatches a `TestRun` via the outbox worker (§4 below) — **202 Accepted**, `Location` header pointing at the new `TestRun` |
+| POST | `/api/v1/test-suites/{id}/run?targetVersionId={id}` | Dispatches a `TestRun` via Hangfire (§4 below) — **202 Accepted**, `Location` header pointing at the new `TestRun` |
 | GET | `/api/v1/test-runs/{id}` | Poll status / read results (`Pending` → `Completed`) |
 
 ### 2.8 Audit Log & Settings
@@ -148,9 +148,9 @@ Worth making explicit since it reconciles two decisions that could otherwise loo
 
 ---
 
-## 4. Async test runs: always via the outbox, never inline
+## 4. Async test runs: always via Hangfire, never inline
 
-`POST /test-suites/{id}/run` always dispatches through the Step 1 §8 outbox/background worker and returns `202 Accepted`, even for a three-case suite that would finish in milliseconds. A dual sync-for-small/async-for-large path was considered and rejected: it means the client has to handle two different response shapes for the same logical action depending on suite size (a threshold that's also awkward to pick and will eventually be wrong in one direction), whereas a single always-async contract is simpler for every client to implement once, and scales unmodified as suites grow larger over the product's life. `GET /test-runs/{id}` is cheap to poll; a future iteration can upgrade this to push-based (SignalR) without changing the resource model at all.
+`POST /test-suites/{id}/run` always dispatches through the Step 1 §8 background job infrastructure (Hangfire) and returns `202 Accepted`, even for a three-case suite that would finish in milliseconds. A dual sync-for-small/async-for-large path was considered and rejected: it means the client has to handle two different response shapes for the same logical action depending on suite size (a threshold that's also awkward to pick and will eventually be wrong in one direction), whereas a single always-async contract is simpler for every client to implement once, and scales unmodified as suites grow larger over the product's life. `GET /test-runs/{id}` is cheap to poll; a future iteration can upgrade this to push-based (SignalR) without changing the resource model at all.
 
 ---
 

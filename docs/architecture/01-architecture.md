@@ -39,7 +39,7 @@ SchemaForge.Api                <- depends on Application, Infrastructure, Contra
 | **Domain** | Entities, aggregates, value objects, domain events, domain services, invariants, enums, repository *interfaces* | EF Core, ASP.NET, HTTP, JSON serialization attributes, any package that isn't pure C# |
 | **SharedKernel** | Cross-module primitives: `AggregateRoot<TId>`, `Entity<TId>`, `ValueObject`, `Result`/`Result<T>`, `Error`, `IDomainEvent`, `TenantId`, `AuditableEntity` base | Anything module-specific (no `Schema`, no `Organization`) |
 | **Application** | Use cases (commands/queries/handlers), orchestration, validation via FluentValidation, port interfaces for infrastructure (`IFileStorage`, `ISchemaSuggestionProvider`, `ICacheService`), DTO ↔ domain mapping | EF Core implementations, HTTP concerns, direct SQL |
-| **Infrastructure** | EF Core `DbContext` + configurations + migrations, repository implementations, Redis cache implementation, external service adapters, background job/outbox processing | Business rules, validation logic beyond data-integrity constraints |
+| **Infrastructure** | EF Core `DbContext` + configurations + migrations, repository implementations, Redis cache implementation, external service adapters, Hangfire-backed background job processing | Business rules, validation logic beyond data-integrity constraints |
 | **Contracts** | Request/response records exposed at the HTTP boundary (and reused to generate the TypeScript/C# client artifacts) | References to Domain or Application types — Contracts must be mappable *from* Application DTOs but never leak Domain types outward |
 | **Api** | Controllers/minimal API endpoints, DI composition root, middleware pipeline, auth policies, OpenAPI setup | Business logic, direct EF Core queries |
 
@@ -108,13 +108,13 @@ This gets full detail in Step 5 (database schema); it's listed here because "whi
 
 ---
 
-## 8. Background & long-running work: outbox + in-process worker, not a message broker (yet)
+## 8. Background & long-running work: Hangfire, not a hand-rolled outbox or a message broker
 
 Several features are not safely synchronous within an HTTP request: **Schema Testing** (running a full test suite against a schema), **Documentation generation** for large schemas, and future **AI schema suggestion** (calling an LLM over an uploaded PDF).
 
-**Decision**: Use the **transactional outbox pattern** — a `background_jobs` table written in the same transaction as the triggering command — processed by an in-process `IHostedService` worker (a `BackgroundService` polling/leasing rows). No RabbitMQ/Azure Service Bus/Hangfire dependency yet.
+**Decision**: Use **Hangfire** (backed by Postgres storage, `Hangfire.PostgreSql`) for background job scheduling and execution. No RabbitMQ/Azure Service Bus — that's still real infrastructure weight this project doesn't need. But a hand-rolled outbox table plus a custom `BackgroundService` polling/leasing loop isn't the right amount of restraint either — it's *more* code to write, test, and maintain than taking a mature, widely-used library, in exchange for a "demonstrates you can build it yourself" benefit that isn't worth the ongoing cost of owning retry logic, backoff, dead-lettering, and a dashboard from scratch. *(This reverses an earlier hand-rolled-outbox decision — see the confirmed-decision note below.)*
 
-**Why**: Introducing a message broker is real infrastructure weight (another moving part in docker-compose, another failure mode to handle, another thing a portfolio reviewer needs installed to run the repo) that isn't justified by current throughput needs. The outbox table gives us the property that actually matters — **at-least-once, transactionally-consistent job scheduling** (a job is never lost because the DB write and the job enqueue are atomic) — without the operational cost. Critically, the worker is built behind an `IJobDispatcher`/`IBackgroundJobProcessor` port in Application, so swapping the in-process worker for a real broker later (when there's an actual scaling reason to) is an Infrastructure-layer change only, not a rewrite. This mirrors the AI-provider abstraction principle: build the seam now, defer the expensive infrastructure until it's earned.
+**Why Hangfire specifically**: it gives us the property that actually matters — reliable, persisted job scheduling with at-least-once execution — with retries, a real dashboard, and recurring-job support included, for the cost of one NuGet package and one Postgres storage schema it manages itself (no hand-designed `background_jobs` table, Step 5's schema no longer needs one). Critically, **the Application layer still only depends on a small `IJobDispatcher` port**, not on Hangfire directly — Clean Architecture's layer rule (Step 1 §2: Application must not reference Infrastructure-layer packages) requires that regardless of what sits behind it, so the AI-provider-style "build the seam now" principle from §9 still holds. What changed is only what's *behind* that port: `Infrastructure`'s implementation now wraps Hangfire's `IBackgroundJobClient` instead of a hand-rolled polling loop.
 
 ---
 
@@ -148,7 +148,7 @@ Several features are not safely synchronous within an HTTP request: **Schema Tes
 ## Decisions confirmed during review
 
 1. **MediatR everywhere, not just in CQRS modules** — confirmed. All modules, including simple CRUD (Settings, Teams, Projects), route through MediatR so the full pipeline behavior chain (validation, logging, tenant-auth, transactions) applies uniformly. Trade-off accepted: simple modules take a MediatR dependency they don't strictly need for CQRS purposes, in exchange for one consistent, impossible-to-bypass cross-cutting pipeline instead of two parallel mechanisms.
-2. **Hand-rolled outbox + `BackgroundService` over Hangfire** — confirmed. No message-broker-grade dependency added yet; background job execution (schema testing, doc generation, future AI calls) is built against a plain Postgres outbox table behind an `IJobDispatcher` port, optimizing for portfolio depth and a lean docker-compose footprint over Hangfire's dashboard/retry conveniences. Revisit only if real scaling pressure justifies it.
+2. **Hangfire over a hand-rolled outbox** — confirmed (revised). Originally decided the other way, optimizing for "hand-rolling it is more demonstrative of engineering depth." Revisited once simplicity was named as an explicit priority: hand-rolling a reliable job queue is real ongoing code to own (retries, backoff, dead-lettering, a dashboard) for a benefit — showing you can build one — that isn't worth the maintenance cost. Hangfire gets the same reliability property (persisted, at-least-once job execution against Postgres storage) for one dependency, still behind the `IJobDispatcher` Application-layer port §8 describes, so the architectural seam is unaffected — only the Infrastructure-layer implementation behind it changed.
 
 ---
 
