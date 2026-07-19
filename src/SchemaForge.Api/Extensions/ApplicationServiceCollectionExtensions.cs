@@ -1,6 +1,7 @@
 using FluentValidation;
 using SchemaForge.Application.Common.Behaviors;
 using SchemaForge.Application.Identity.Commands.RegisterUser;
+using SchemaForge.Application.Schemas.Validation;
 
 namespace SchemaForge.Api.Extensions;
 
@@ -9,6 +10,10 @@ public static class ApplicationServiceCollectionExtensions
     public static IServiceCollection AddApplication(this IServiceCollection services)
     {
         var applicationAssembly = typeof(RegisterUserCommand).Assembly;
+
+        // Pure computation over a SchemaNode tree, no I/O of its own - stateless, safe as a
+        // singleton.
+        services.AddSingleton<ISchemaValidator, SchemaValidator>();
 
         services.AddMediatR(cfg =>
         {

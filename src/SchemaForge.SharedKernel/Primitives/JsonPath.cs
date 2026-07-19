@@ -19,5 +19,9 @@ public sealed record JsonPath
 
     public static JsonPath Root => new("$");
 
+    public JsonPath AppendProperty(string propertyName) => new($"{Value}.{propertyName}");
+
+    public JsonPath AppendIndex(int index) => new($"{Value}[{index}]");
+
     public override string ToString() => Value;
 }
