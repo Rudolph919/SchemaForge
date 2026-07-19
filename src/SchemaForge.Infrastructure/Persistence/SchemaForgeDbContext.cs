@@ -25,6 +25,8 @@ public sealed class SchemaForgeDbContext(
 
     public DbSet<SchemaDefinition> SchemaDefinitions => Set<SchemaDefinition>();
 
+    public DbSet<SchemaVersion> SchemaVersions => Set<SchemaVersion>();
+
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         modelBuilder.HasPostgresExtension("citext");
@@ -49,5 +51,7 @@ public sealed class SchemaForgeDbContext(
             .HasQueryFilter(d => d.OrganizationId == tenantContext.CurrentTenantId);
         modelBuilder.Entity<SchemaDefinition>()
             .HasQueryFilter(d => d.OrganizationId == tenantContext.CurrentTenantId);
+        modelBuilder.Entity<SchemaVersion>()
+            .HasQueryFilter(v => v.OrganizationId == tenantContext.CurrentTenantId);
     }
 }

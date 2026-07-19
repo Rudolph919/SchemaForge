@@ -84,6 +84,14 @@ public sealed class SchemaNode : Entity<Guid>
     internal static SchemaNode CreateEmpty(NodeKind? kind, string? propertyName, int order) =>
         new(Guid.NewGuid(), kind, propertyName, order);
 
+    // Used only by Infrastructure's JSON converter (Step 5 §2 - the RootNode/LocalDefinitions
+    // tree is persisted as an opaque jsonb column via a value converter, not EF's native owned-
+    // type mapping, which can't represent a genuinely self-referential recursive structure).
+    // Reconstructing from storage needs the node's already-assigned Id, unlike CreateEmpty which
+    // always mints a fresh one for a brand-new node.
+    internal static SchemaNode Rehydrate(Guid id, NodeKind? kind, string? propertyName, int order) =>
+        new(id, kind, propertyName, order);
+
     internal void ApplyContent(SchemaNodeContent content)
     {
         Kind = content.Kind;
