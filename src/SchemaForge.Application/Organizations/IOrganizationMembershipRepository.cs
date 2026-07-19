@@ -32,7 +32,15 @@ public interface IOrganizationMembershipRepository
     Task<IReadOnlyList<MembershipWithOrganizationSummary>> GetAllByUserIdAsync(
         Guid userId, CancellationToken cancellationToken);
 
+    // Any status (active/invited/revoked) - used to block duplicate invites, since the DB's
+    // unique (organization_id, user_id) constraint makes a second row impossible regardless of
+    // the existing one's status.
     Task<bool> ExistsForUserAsync(Guid organizationId, Guid userId, CancellationToken cancellationToken);
+
+    // Active specifically - used for the cross-aggregate check before adding someone to a Team
+    // (Step 3 §4): an invited-but-not-yet-accepted or revoked org membership shouldn't be
+    // addable to a team.
+    Task<bool> IsActiveMemberAsync(Guid organizationId, Guid userId, CancellationToken cancellationToken);
 
     // Ambient-tenant-scoped (the EF Core query filter handles "which org" implicitly) - lists
     // every membership of the caller's current organization, any status, for admin visibility
