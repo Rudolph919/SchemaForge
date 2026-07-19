@@ -1,0 +1,15 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.AspNetCore.OpenApi" Version="10.0.9" />
+    <PackageReference Include="Microsoft.OpenApi" Version="2.11.0" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\SchemaForge.Application\SchemaForge.Application.csproj" />
+    <ProjectReference Include="..\SchemaForge.Infrastructure\SchemaForge.Infrastructure.csproj" />
+    <ProjectReference Include="..\SchemaForge.Contracts\SchemaForge.Contracts.csproj" />
+    <ProjectReference Include="..\SchemaForge.SharedKernel\SchemaForge.SharedKernel.csproj" />
+  </ItemGroup>
+
+</Project>
