@@ -11,6 +11,11 @@ public static class ResultExtensions
             ? new OkObjectResult(map(result.Value))
             : CreateProblemResult(result.Error);
 
+    public static IActionResult ToActionResult(this Result result) =>
+        result.IsSuccess
+            ? new NoContentResult()
+            : CreateProblemResult(result.Error);
+
     private static ObjectResult CreateProblemResult(Error error)
     {
         var statusCode = error.Type switch

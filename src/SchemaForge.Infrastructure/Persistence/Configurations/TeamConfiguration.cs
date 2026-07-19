@@ -44,7 +44,7 @@ public sealed class TeamConfiguration : IEntityTypeConfiguration<Team>
             membershipBuilder.WithOwner().HasForeignKey("team_id");
             membershipBuilder.HasKey(m => m.Id);
 
-            membershipBuilder.Property(m => m.Id).HasColumnName("id");
+            membershipBuilder.Property(m => m.Id).HasColumnName("id").ValueGeneratedNever();
             membershipBuilder.Property("team_id").HasColumnName("team_id");
             membershipBuilder.Property(m => m.UserId).HasColumnName("user_id").IsRequired();
             membershipBuilder.Property(m => m.JoinedAt).HasColumnName("joined_at").IsRequired();

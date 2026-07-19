@@ -1,4 +1,5 @@
 using System.Text;
+using System.Text.Json.Serialization;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.IdentityModel.Tokens;
 using SchemaForge.Infrastructure.Security;
@@ -11,7 +12,8 @@ public static class ApiServiceCollectionExtensions
 
     public static IServiceCollection AddApi(this IServiceCollection services, IConfiguration configuration)
     {
-        services.AddControllers();
+        services.AddControllers()
+            .AddJsonOptions(options => options.JsonSerializerOptions.Converters.Add(new JsonStringEnumConverter()));
         services.AddOpenApi();
         services.AddProblemDetails();
 
@@ -22,6 +24,14 @@ public static class ApiServiceCollectionExtensions
             .AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
             .AddJwtBearer(options =>
             {
+                // Without this, ASP.NET Core remaps short claim names to legacy XML-namespaced
+                // ClaimTypes URIs on the way in (e.g. "sub" -> ClaimTypes.NameIdentifier) - the
+                // default is true for backward compatibility, not false as might be assumed.
+                // HttpCurrentUserContext/HttpTenantContext read the short names JwtTokenService
+                // actually writes ("sub", "org_id"), so without this they'd silently never find
+                // them. Confirmed live: ICurrentUserContext.UserId was null for every
+                // authenticated request until this was set.
+                options.MapInboundClaims = false;
                 options.TokenValidationParameters = new TokenValidationParameters
                 {
                     ValidateIssuer = true,
