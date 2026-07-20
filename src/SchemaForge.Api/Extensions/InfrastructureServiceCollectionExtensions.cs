@@ -1,5 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using SchemaForge.Application.Common.Abstractions;
+using SchemaForge.Application.Components;
 using SchemaForge.Application.Identity;
 using SchemaForge.Application.Organizations;
 using SchemaForge.Application.Schemas;
@@ -43,6 +44,8 @@ public static class InfrastructureServiceCollectionExtensions
         services.AddScoped<ISchemaDefinitionRepository, SchemaDefinitionRepository>();
         services.AddScoped<ISchemaVersionRepository, SchemaVersionRepository>();
         services.AddScoped<IValidationRunRepository, ValidationRunRepository>();
+        services.AddScoped<IComponentDefinitionRepository, ComponentDefinitionRepository>();
+        services.AddScoped<IComponentVersionRepository, ComponentVersionRepository>();
         services.AddScoped<IUnitOfWork, UnitOfWork>();
 
         services.AddScoped<IPasswordHasher, IdentityPasswordHasher>();
