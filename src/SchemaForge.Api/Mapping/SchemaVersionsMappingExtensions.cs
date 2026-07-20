@@ -48,6 +48,9 @@ public static class SchemaVersionsMappingExtensions
     public static MoveSchemaNodeCommand ToCommand(this MoveSchemaNodeRequest request, Guid schemaVersionId, Guid nodeId) =>
         new(schemaVersionId, nodeId, request.NewOrder);
 
+    public static SchemaDiffResponse ToResponse(this SchemaDiff diff) => new(
+        diff.AddedPaths, diff.RemovedPaths, [.. diff.ChangedPaths.Select(c => new SchemaDiffChangeResponse(c.Path, c.Changes))]);
+
     public static SchemaNodeContent ToDomain(this UpdateSchemaNodeRequest request) => new(
         request.Kind?.ToDomain(),
         request.Description,

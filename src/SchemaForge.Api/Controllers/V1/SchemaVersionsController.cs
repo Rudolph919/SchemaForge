@@ -11,6 +11,7 @@ using SchemaForge.Application.Schemas.Commands.MoveSchemaNode;
 using SchemaForge.Application.Schemas.Commands.PublishSchemaVersion;
 using SchemaForge.Application.Schemas.Commands.RemoveSchemaNode;
 using SchemaForge.Application.Schemas.Commands.UpdateSchemaNode;
+using SchemaForge.Application.Schemas.Queries.GetSchemaDiff;
 using SchemaForge.Application.Schemas.Queries.GetSchemaVersion;
 using SchemaForge.Application.Schemas.Queries.ListSchemaVersions;
 using SchemaForge.Application.Validation.Commands.ValidateJsonPayload;
@@ -108,5 +109,12 @@ public sealed class SchemaVersionsController(ISender sender) : ControllerBase
     {
         var result = await sender.Send(new ListValidationRunsQuery(schemaVersionId), cancellationToken);
         return result.ToActionResult(runs => runs.Select(r => r.ToResponse()).ToList());
+    }
+
+    [HttpGet("api/v1/schema-versions/{schemaVersionId:guid}/diff")]
+    public async Task<IActionResult> Diff(Guid schemaVersionId, [FromQuery] Guid against, CancellationToken cancellationToken)
+    {
+        var result = await sender.Send(new GetSchemaDiffQuery(schemaVersionId, against), cancellationToken);
+        return result.ToActionResult(d => d.ToResponse());
     }
 }
