@@ -6,6 +6,8 @@ import SchemaNodeTree from '@/modules/schemas/components/SchemaNodeTree.vue'
 import { ApiError } from '@/shared/api/httpClient'
 import Modal from '@/shared/components/Modal.vue'
 import type {
+  CompositionKind,
+  NodeAttachmentKind,
   NodeKind,
   SchemaFormat,
   SchemaNodeResponse,
@@ -13,10 +15,21 @@ import type {
   UpdateSchemaNodeRequest,
 } from '@/types/schemas'
 
-// Object properties only in this slice - array items, composition branches, and conditional
-// if/then/else attachment are a separate follow-up (they each need their own attachment UX, and
-// half-wiring them here would leave nodes in the tree with no way to fully configure them).
-const ADDABLE_KINDS: NodeKind[] = ['Object', 'String', 'Number', 'Integer', 'Boolean', 'Null']
+const ADDABLE_KINDS: NodeKind[] = ['Object', 'Array', 'String', 'Number', 'Integer', 'Boolean', 'Null']
+const COMPOSITION_KINDS: CompositionKind[] = ['OneOf', 'AnyOf', 'AllOf', 'Not']
+
+// Local definitions (within-version reuse for recursive schemas) have no Application command or
+// Api endpoint yet - only the Domain method (SchemaVersion.AddLocalDefinition) exists. Wiring
+// them up is backend work first, so they're out of scope for this frontend-only slice.
+const ATTACHMENT_LABELS: Record<NodeAttachmentKind, string> = {
+  ObjectProperty: 'Property',
+  ArrayPrefixItem: 'Prefix Item',
+  ArrayItems: 'Items',
+  CompositionBranch: 'Branch',
+  ConditionalIf: 'If',
+  ConditionalThen: 'Then',
+  ConditionalElse: 'Else',
+}
 const FORMATS: SchemaFormat[] = [
   'Date',
   'DateTime',
@@ -50,35 +63,37 @@ async function load() {
   }
 }
 
-// --- Add property ---
+// --- Attach node (property / prefix item / items / composition branch / if / then / else) ---
 const addParentId = ref<string | null>(null)
+const addAttachmentKind = ref<NodeAttachmentKind>('ObjectProperty')
 const addPropertyName = ref('')
 const addKind = ref<NodeKind>('String')
 const addError = ref<string | null>(null)
 const isAdding = ref(false)
 
-function openAddProperty(parentNodeId: string) {
+function openAttachNode(parentNodeId: string, attachmentKind: NodeAttachmentKind) {
   addParentId.value = parentNodeId
+  addAttachmentKind.value = attachmentKind
   addPropertyName.value = ''
   addKind.value = 'String'
   addError.value = null
 }
 
-async function handleAddProperty() {
+async function handleAttachNode() {
   if (!addParentId.value) return
   addError.value = null
   isAdding.value = true
   try {
     await schemaVersionsApi.addNode(versionId.value, {
       parentNodeId: addParentId.value,
-      attachmentKind: 'ObjectProperty',
-      propertyName: addPropertyName.value,
+      attachmentKind: addAttachmentKind.value,
+      propertyName: addAttachmentKind.value === 'ObjectProperty' ? addPropertyName.value : null,
       kind: addKind.value,
     })
     addParentId.value = null
     await load()
   } catch (error) {
-    addError.value = error instanceof ApiError ? error.message : 'Could not add property.'
+    addError.value = error instanceof ApiError ? error.message : `Could not add ${ATTACHMENT_LABELS[addAttachmentKind.value].toLowerCase()}.`
   } finally {
     isAdding.value = false
   }
@@ -90,6 +105,7 @@ const editDescription = ref('')
 const editNotes = ref('')
 const editNullable = ref(false)
 const editRequired = ref(false)
+const editComposition = ref<CompositionKind | ''>('')
 const editMinLength = ref<number | null>(null)
 const editMaxLength = ref<number | null>(null)
 const editPattern = ref('')
@@ -103,6 +119,9 @@ const editMultipleOf = ref<number | null>(null)
 const editMinProperties = ref<number | null>(null)
 const editMaxProperties = ref<number | null>(null)
 const editAdditionalProperties = ref(true)
+const editMinItems = ref<number | null>(null)
+const editMaxItems = ref<number | null>(null)
+const editUniqueItems = ref(false)
 const editError = ref<string | null>(null)
 const isSavingNode = ref(false)
 
@@ -112,6 +131,7 @@ function openEditNode(node: SchemaNodeResponse) {
   editNotes.value = node.notes ?? ''
   editNullable.value = node.isNullable
   editRequired.value = node.isRequiredByParent
+  editComposition.value = node.composition ?? ''
   editMinLength.value = node.stringConstraints?.minLength ?? null
   editMaxLength.value = node.stringConstraints?.maxLength ?? null
   editPattern.value = node.stringConstraints?.pattern ?? ''
@@ -125,6 +145,9 @@ function openEditNode(node: SchemaNodeResponse) {
   editMinProperties.value = node.objectConstraints?.minProperties ?? null
   editMaxProperties.value = node.objectConstraints?.maxProperties ?? null
   editAdditionalProperties.value = node.objectConstraints?.additionalPropertiesAllowed ?? true
+  editMinItems.value = node.arrayConstraints?.minItems ?? null
+  editMaxItems.value = node.arrayConstraints?.maxItems ?? null
+  editUniqueItems.value = node.arrayConstraints?.uniqueItems ?? false
   editError.value = null
 }
 
@@ -146,7 +169,7 @@ async function handleSaveNode() {
       allowedValues: node.allowedValues,
       constValue: node.constValue,
       dependentRequired: node.dependentRequired,
-      composition: node.composition,
+      composition: editComposition.value || null,
       componentReference: node.componentReference,
       localDefinitionRef: node.localDefinitionRef,
       objectConstraints:
@@ -157,7 +180,10 @@ async function handleSaveNode() {
               additionalPropertiesAllowed: editAdditionalProperties.value,
             }
           : null,
-      arrayConstraints: node.arrayConstraints,
+      arrayConstraints:
+        node.kind === 'Array'
+          ? { minItems: editMinItems.value, maxItems: editMaxItems.value, uniqueItems: editUniqueItems.value }
+          : null,
       stringConstraints:
         node.kind === 'String'
           ? {
@@ -251,7 +277,7 @@ onMounted(load)
           :siblings="[]"
           :depth="0"
           :editable="isEditable"
-          @add-property="openAddProperty"
+          @attach-node="openAttachNode"
           @edit-node="openEditNode"
           @remove-node="handleRemoveNode"
           @move-node="handleMoveNode"
@@ -259,9 +285,9 @@ onMounted(load)
       </div>
     </template>
 
-    <Modal v-if="addParentId" title="Add Property" @close="addParentId = null">
-      <form class="space-y-4" @submit.prevent="handleAddProperty">
-        <div>
+    <Modal v-if="addParentId" :title="`Add ${ATTACHMENT_LABELS[addAttachmentKind]}`" @close="addParentId = null">
+      <form class="space-y-4" @submit.prevent="handleAttachNode">
+        <div v-if="addAttachmentKind === 'ObjectProperty'">
           <label for="add-name" class="block text-sm font-medium text-slate-700">Property name</label>
           <input
             id="add-name"
@@ -323,6 +349,20 @@ onMounted(load)
             <input v-model="editRequired" type="checkbox" />
             Required by parent
           </label>
+        </div>
+
+        <div>
+          <label for="edit-composition" class="block text-sm font-medium text-slate-700">
+            Composition <span class="text-slate-400">(oneOf / anyOf / allOf / not)</span>
+          </label>
+          <select
+            id="edit-composition"
+            v-model="editComposition"
+            class="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm focus:border-slate-500 focus:outline-none"
+          >
+            <option value="">None</option>
+            <option v-for="kind in COMPOSITION_KINDS" :key="kind" :value="kind">{{ kind }}</option>
+          </select>
         </div>
 
         <template v-if="editingNode.kind === 'String'">
@@ -445,6 +485,33 @@ onMounted(load)
           <label class="flex items-center gap-2 text-sm text-slate-700">
             <input v-model="editAdditionalProperties" type="checkbox" />
             Allow additional properties
+          </label>
+        </template>
+
+        <template v-if="editingNode.kind === 'Array'">
+          <div class="grid grid-cols-2 gap-3">
+            <div>
+              <label for="edit-min-items" class="block text-xs font-medium text-slate-500">Min items</label>
+              <input
+                id="edit-min-items"
+                v-model.number="editMinItems"
+                type="number"
+                class="mt-1 w-full rounded-md border border-slate-300 px-2 py-1.5 text-sm focus:border-slate-500 focus:outline-none"
+              />
+            </div>
+            <div>
+              <label for="edit-max-items" class="block text-xs font-medium text-slate-500">Max items</label>
+              <input
+                id="edit-max-items"
+                v-model.number="editMaxItems"
+                type="number"
+                class="mt-1 w-full rounded-md border border-slate-300 px-2 py-1.5 text-sm focus:border-slate-500 focus:outline-none"
+              />
+            </div>
+          </div>
+          <label class="flex items-center gap-2 text-sm text-slate-700">
+            <input v-model="editUniqueItems" type="checkbox" />
+            Require unique items
           </label>
         </template>
 
