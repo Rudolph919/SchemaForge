@@ -25,6 +25,10 @@ public static class ApplicationServiceCollectionExtensions
         services.AddSingleton<ISchemaExporter, CSharpExporter>();
         services.AddSingleton<IJsonSchemaImporter, JsonSchemaImporter>();
 
+        services.AddSingleton<IDocumentationRenderer, JsonDocumentationRenderer>();
+        services.AddSingleton<IDocumentationRenderer, MarkdownDocumentationRenderer>();
+        services.AddSingleton<IDocumentationRenderer, HtmlDocumentationRenderer>();
+
         services.AddMediatR(cfg =>
         {
             cfg.RegisterServicesFromAssembly(applicationAssembly);

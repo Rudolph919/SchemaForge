@@ -14,6 +14,7 @@ using SchemaForge.Application.Schemas.Commands.RemoveSchemaNode;
 using SchemaForge.Application.Schemas.Commands.UpdateSchemaNode;
 using SchemaForge.Application.Schemas.Queries.GetSchemaDiff;
 using SchemaForge.Application.Schemas.Queries.GetSchemaVersion;
+using SchemaForge.Application.Schemas.Queries.GetSchemaVersionDocumentation;
 using SchemaForge.Application.Schemas.Queries.GetSchemaVersionExport;
 using SchemaForge.Application.Schemas.Queries.ListSchemaVersions;
 using SchemaForge.Application.Validation.Commands.ValidateJsonPayload;
@@ -147,5 +148,20 @@ public sealed class SchemaVersionsController(ISender sender) : ControllerBase
     {
         var result = await sender.Send(new GetSchemaVersionExportQuery(schemaVersionId, format), cancellationToken);
         return result.ToContentActionResult(ExportContentTypes.GetValueOrDefault(format, "text/plain"));
+    }
+
+    private static readonly Dictionary<string, string> DocumentationContentTypes = new()
+    {
+        ["html"] = "text/html",
+        ["markdown"] = "text/markdown",
+        ["json"] = "application/json",
+    };
+
+    [HttpGet("api/v1/schema-versions/{schemaVersionId:guid}/documentation")]
+    public async Task<IActionResult> Documentation(
+        Guid schemaVersionId, [FromQuery] string format, CancellationToken cancellationToken)
+    {
+        var result = await sender.Send(new GetSchemaVersionDocumentationQuery(schemaVersionId, format), cancellationToken);
+        return result.ToContentActionResult(DocumentationContentTypes.GetValueOrDefault(format, "text/plain"));
     }
 }
