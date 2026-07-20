@@ -67,6 +67,7 @@ export const httpClient = {
   get: <TResponse>(path: string) => request<TResponse>(path, 'GET'),
   post: <TResponse>(path: string, body?: unknown) => request<TResponse>(path, 'POST', body),
   put: <TResponse>(path: string, body?: unknown) => request<TResponse>(path, 'PUT', body),
+  patch: <TResponse>(path: string, body?: unknown) => request<TResponse>(path, 'PATCH', body),
   delete: <TResponse>(path: string) => request<TResponse>(path, 'DELETE'),
   upload: <TResponse>(path: string, file: File) => upload<TResponse>(path, file),
 }
