@@ -3,6 +3,7 @@ using SchemaForge.Application.Common.Abstractions;
 using SchemaForge.Application.Identity;
 using SchemaForge.Application.Organizations;
 using SchemaForge.Application.Schemas;
+using SchemaForge.Application.Validation;
 using SchemaForge.Application.Workspaces;
 using SchemaForge.Infrastructure.Persistence;
 using SchemaForge.Infrastructure.Persistence.Interceptors;
@@ -41,6 +42,7 @@ public static class InfrastructureServiceCollectionExtensions
         services.AddScoped<ISourceDocumentRepository, SourceDocumentRepository>();
         services.AddScoped<ISchemaDefinitionRepository, SchemaDefinitionRepository>();
         services.AddScoped<ISchemaVersionRepository, SchemaVersionRepository>();
+        services.AddScoped<IValidationRunRepository, ValidationRunRepository>();
         services.AddScoped<IUnitOfWork, UnitOfWork>();
 
         services.AddScoped<IPasswordHasher, IdentityPasswordHasher>();

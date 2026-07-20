@@ -3,6 +3,7 @@ using SchemaForge.Application.Common.Abstractions;
 using SchemaForge.Domain.Identity;
 using SchemaForge.Domain.Organizations;
 using SchemaForge.Domain.Schemas;
+using SchemaForge.Domain.Validation;
 using SchemaForge.Domain.Workspaces;
 
 namespace SchemaForge.Infrastructure.Persistence;
@@ -26,6 +27,8 @@ public sealed class SchemaForgeDbContext(
     public DbSet<SchemaDefinition> SchemaDefinitions => Set<SchemaDefinition>();
 
     public DbSet<SchemaVersion> SchemaVersions => Set<SchemaVersion>();
+
+    public DbSet<ValidationRun> ValidationRuns => Set<ValidationRun>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -53,5 +56,7 @@ public sealed class SchemaForgeDbContext(
             .HasQueryFilter(d => d.OrganizationId == tenantContext.CurrentTenantId);
         modelBuilder.Entity<SchemaVersion>()
             .HasQueryFilter(v => v.OrganizationId == tenantContext.CurrentTenantId);
+        modelBuilder.Entity<ValidationRun>()
+            .HasQueryFilter(r => r.OrganizationId == tenantContext.CurrentTenantId);
     }
 }
