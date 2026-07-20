@@ -4,6 +4,7 @@ import { useRoute, useRouter } from 'vue-router'
 import { schemaDefinitionsApi } from '@/modules/schemas/api/schemaDefinitionsApi'
 import { schemaVersionsApi } from '@/modules/schemas/api/schemaVersionsApi'
 import { ApiError } from '@/shared/api/httpClient'
+import Modal from '@/shared/components/Modal.vue'
 import type { SchemaDefinitionDetailResponse, SchemaVersionSummaryResponse, VersionBumpKind } from '@/types/schemas'
 
 const route = useRoute()
@@ -111,6 +112,44 @@ async function handleDeprecate(versionId: string) {
   }
 }
 
+// --- Import ---
+const isImportOpen = ref(false)
+const importDocumentText = ref('')
+const importBumpKind = ref<VersionBumpKind>('Minor')
+const importSummary = ref('')
+const importError = ref<string | null>(null)
+const isImporting = ref(false)
+
+function openImport() {
+  importDocumentText.value = ''
+  importBumpKind.value = 'Minor'
+  importSummary.value = ''
+  importError.value = null
+  isImportOpen.value = true
+}
+
+async function handleImport() {
+  let document: unknown
+  try {
+    document = JSON.parse(importDocumentText.value)
+  } catch {
+    importError.value = 'Not valid JSON.'
+    return
+  }
+
+  importError.value = null
+  isImporting.value = true
+  try {
+    await schemaVersionsApi.importSchema(schemaId.value, document, importBumpKind.value, importSummary.value || null)
+    isImportOpen.value = false
+    await load()
+  } catch (error) {
+    importError.value = error instanceof ApiError ? error.message : 'Could not import schema.'
+  } finally {
+    isImporting.value = false
+  }
+}
+
 function statusClass(status: SchemaVersionSummaryResponse['status']): string {
   switch (status) {
     case 'Draft':
@@ -212,6 +251,15 @@ onMounted(load)
       <div class="mt-6 rounded-lg border border-slate-200 bg-white p-6">
         <div class="flex items-center justify-between">
           <h2 class="text-base font-semibold text-slate-900">Versions</h2>
+          <button
+            type="button"
+            :disabled="hasDraft"
+            :title="hasDraft ? 'A draft version already exists' : undefined"
+            class="rounded-md border border-slate-300 px-3 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-50"
+            @click="openImport"
+          >
+            Import JSON Schema
+          </button>
         </div>
 
         <form class="mt-4 flex flex-wrap items-end gap-2 border-b border-slate-100 pb-4" @submit.prevent="handleCreateVersion">
@@ -295,5 +343,54 @@ onMounted(load)
         </table>
       </div>
     </template>
+
+    <Modal v-if="isImportOpen" title="Import JSON Schema" @close="isImportOpen = false">
+      <form class="space-y-4" @submit.prevent="handleImport">
+        <div>
+          <label for="import-document" class="block text-sm font-medium text-slate-700">JSON Schema document</label>
+          <textarea
+            id="import-document"
+            v-model="importDocumentText"
+            rows="10"
+            spellcheck="false"
+            required
+            class="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 font-mono text-sm focus:border-slate-500 focus:outline-none"
+          />
+        </div>
+        <div class="grid grid-cols-2 gap-3">
+          <div>
+            <label for="import-bump-kind" class="block text-xs font-medium text-slate-500">Bump</label>
+            <select
+              id="import-bump-kind"
+              v-model="importBumpKind"
+              class="mt-1 w-full rounded-md border border-slate-300 px-2 py-1.5 text-sm focus:border-slate-500 focus:outline-none"
+            >
+              <option value="Major">Major</option>
+              <option value="Minor">Minor</option>
+              <option value="Patch">Patch</option>
+            </select>
+          </div>
+          <div>
+            <label for="import-summary" class="block text-xs font-medium text-slate-500">
+              Change summary <span class="text-slate-400">(optional)</span>
+            </label>
+            <input
+              id="import-summary"
+              v-model="importSummary"
+              type="text"
+              class="mt-1 w-full rounded-md border border-slate-300 px-2 py-1.5 text-sm focus:border-slate-500 focus:outline-none"
+            />
+          </div>
+        </div>
+        <p v-if="importError" class="text-sm text-red-600">{{ importError }}</p>
+        <button
+          type="submit"
+          :disabled="isImporting"
+          class="w-full rounded-md bg-slate-900 px-3 py-2 text-sm font-medium text-white hover:bg-slate-800 disabled:opacity-50"
+        >
+          {{ isImporting ? 'Importing…' : 'Import' }}
+        </button>
+      </form>
+    </Modal>
   </div>
 </template>

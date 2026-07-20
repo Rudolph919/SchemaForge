@@ -5,11 +5,19 @@ import type {
   CreateSchemaVersionRequest,
   CreateSchemaVersionResponse,
   MoveSchemaNodeRequest,
+  SchemaDiffResponse,
   SchemaVersionDetailResponse,
   SchemaVersionSummaryResponse,
   UpdateSchemaNodeRequest,
+  VersionBumpKind,
 } from '@/types/schemas'
 import type { ValidateJsonPayloadResponse, ValidationRunSummaryResponse } from '@/types/validation'
+
+export const EXPORT_FORMATS = ['json-schema', 'openapi', 'typescript', 'csharp'] as const
+export type ExportFormat = (typeof EXPORT_FORMATS)[number]
+
+export const DOCUMENTATION_FORMATS = ['html', 'markdown', 'json'] as const
+export type DocumentationFormat = (typeof DOCUMENTATION_FORMATS)[number]
 
 export const schemaVersionsApi = {
   listVersions: (schemaDefinitionId: string) =>
@@ -43,4 +51,21 @@ export const schemaVersionsApi = {
 
   listValidationRuns: (schemaVersionId: string) =>
     httpClient.get<ValidationRunSummaryResponse[]>(`/api/v1/schema-versions/${schemaVersionId}/validation-runs`),
+
+  export: (schemaVersionId: string, format: ExportFormat) =>
+    httpClient.getText(`/api/v1/schema-versions/${schemaVersionId}/export?format=${format}`),
+
+  documentation: (schemaVersionId: string, format: DocumentationFormat) =>
+    httpClient.getText(`/api/v1/schema-versions/${schemaVersionId}/documentation?format=${format}`),
+
+  diff: (schemaVersionId: string, against: string) =>
+    httpClient.get<SchemaDiffResponse>(`/api/v1/schema-versions/${schemaVersionId}/diff?against=${against}`),
+
+  // Raw JSON Schema document as the request body - httpClient.post JSON.stringifies whatever is
+  // passed as `document`, matching the backend's [FromBody] JsonElement pattern.
+  importSchema: (schemaDefinitionId: string, document: unknown, bumpKind: VersionBumpKind, changeSummary: string | null) =>
+    httpClient.post<CreateSchemaVersionResponse>(
+      `/api/v1/schemas/${schemaDefinitionId}/import?bumpKind=${bumpKind}${changeSummary ? `&changeSummary=${encodeURIComponent(changeSummary)}` : ''}`,
+      document,
+    ),
 }
