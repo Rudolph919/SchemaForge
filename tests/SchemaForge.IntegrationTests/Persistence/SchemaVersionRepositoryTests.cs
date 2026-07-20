@@ -112,6 +112,28 @@ public sealed class SchemaVersionRepositoryTests(PostgresFixture postgres) : IAs
         latest.Should().Be(SemVer.Create(1, 2, 0));
     }
 
+    // HasDraftAsync (used by CreateSchemaVersionHandler) is a check-then-act guard, not an atomic
+    // one - it can't stop two concurrent requests that both read "no draft exists" before either
+    // writes. The partial unique index (`ux_schema_versions_one_draft ... WHERE status = 'Draft'`,
+    // Step 3 §4/Step 5 §2) is what actually makes the invariant hold under a race, at the database
+    // level rather than the application level. This bypasses HasDraftAsync entirely to prove that.
+    [Fact]
+    public async Task The_partial_unique_index_rejects_a_second_concurrently_inserted_draft()
+    {
+        var first = SchemaVersion.CreateDraft(_organizationId, _schemaDefinitionId, SemVer.Initial);
+        var second = SchemaVersion.CreateDraft(_organizationId, _schemaDefinitionId, SemVer.Create(1, 1, 0));
+
+        await using var firstContext = new SchemaForgeDbContext(_options, _tenantContext);
+        firstContext.SchemaVersions.Add(first);
+        await firstContext.SaveChangesAsync();
+
+        await using var secondContext = new SchemaForgeDbContext(_options, _tenantContext);
+        secondContext.SchemaVersions.Add(second);
+        var act = () => secondContext.SaveChangesAsync();
+
+        await act.Should().ThrowAsync<DbUpdateException>();
+    }
+
     [Fact]
     public async Task HasDraftAsync_reflects_the_current_draft_state()
     {
