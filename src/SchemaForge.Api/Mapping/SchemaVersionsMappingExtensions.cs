@@ -67,7 +67,7 @@ public static class SchemaVersionsMappingExtensions
         request.ComponentReference?.ToDomain(),
         request.LocalDefinitionRef);
 
-    private static SchemaNodeResponse ToResponse(this SchemaNode node) => new(
+    internal static SchemaNodeResponse ToResponse(this SchemaNode node) => new(
         node.Id,
         node.PropertyName,
         node.Order,
@@ -96,36 +96,36 @@ public static class SchemaVersionsMappingExtensions
         node.ComponentReference?.ToResponse(),
         node.LocalDefinitionRef);
 
-    private static LocalDefinitionResponse ToResponse(this LocalDefinition definition) =>
+    internal static LocalDefinitionResponse ToResponse(this LocalDefinition definition) =>
         new(definition.Id, definition.Name, definition.RootNode.ToResponse());
 
-    private static ObjectConstraintsDto ToResponse(this ObjectConstraints c) =>
+    internal static ObjectConstraintsDto ToResponse(this ObjectConstraints c) =>
         new(c.MinProperties, c.MaxProperties, c.AdditionalPropertiesAllowed);
 
-    private static ObjectConstraints ToDomain(this ObjectConstraintsDto c) =>
+    internal static ObjectConstraints ToDomain(this ObjectConstraintsDto c) =>
         new(c.MinProperties, c.MaxProperties, c.AdditionalPropertiesAllowed);
 
-    private static ArrayConstraintsDto ToResponse(this ArrayConstraints c) => new(c.MinItems, c.MaxItems, c.UniqueItems);
+    internal static ArrayConstraintsDto ToResponse(this ArrayConstraints c) => new(c.MinItems, c.MaxItems, c.UniqueItems);
 
-    private static ArrayConstraints ToDomain(this ArrayConstraintsDto c) => new(c.MinItems, c.MaxItems, c.UniqueItems);
+    internal static ArrayConstraints ToDomain(this ArrayConstraintsDto c) => new(c.MinItems, c.MaxItems, c.UniqueItems);
 
-    private static StringConstraintsDto ToResponse(this StringConstraints c) =>
+    internal static StringConstraintsDto ToResponse(this StringConstraints c) =>
         new(c.MinLength, c.MaxLength, c.Pattern, c.Format?.ToContract(), c.CustomFormatValue);
 
-    private static StringConstraints ToDomain(this StringConstraintsDto c) =>
+    internal static StringConstraints ToDomain(this StringConstraintsDto c) =>
         new(c.MinLength, c.MaxLength, c.Pattern, c.Format?.ToDomain(), c.CustomFormatValue);
 
-    private static NumericConstraintsDto ToResponse(this NumericConstraints c) =>
+    internal static NumericConstraintsDto ToResponse(this NumericConstraints c) =>
         new(c.Minimum, c.Maximum, c.ExclusiveMinimum, c.ExclusiveMaximum, c.MultipleOf);
 
-    private static NumericConstraints ToDomain(this NumericConstraintsDto c) =>
+    internal static NumericConstraints ToDomain(this NumericConstraintsDto c) =>
         new(c.Minimum, c.Maximum, c.ExclusiveMinimum, c.ExclusiveMaximum, c.MultipleOf);
 
-    private static ComponentReferenceDto ToResponse(this ComponentReference reference) => new(
+    internal static ComponentReferenceDto ToResponse(this ComponentReference reference) => new(
         reference.ComponentVersionId,
         new VersionConstraintDto(reference.Constraint.Kind.ToContract(), reference.Constraint.Version?.ToString()));
 
-    private static ComponentReference ToDomain(this ComponentReferenceDto dto)
+    internal static ComponentReference ToDomain(this ComponentReferenceDto dto)
     {
         var constraint = dto.Constraint.Kind switch
         {
@@ -138,15 +138,15 @@ public static class SchemaVersionsMappingExtensions
         return new ComponentReference(dto.ComponentVersionId, constraint);
     }
 
-    private static SharedKernel.Primitives.SemVer ParseSemVer(string value)
+    internal static SharedKernel.Primitives.SemVer ParseSemVer(string value)
     {
         var parts = value.Split('.');
         return SharedKernel.Primitives.SemVer.Create(int.Parse(parts[0]), int.Parse(parts[1]), int.Parse(parts[2]));
     }
 
-    private static JsonLiteral ToJsonLiteral(JsonElement element) => JsonLiteral.FromRawJson(element.GetRawText());
+    internal static JsonLiteral ToJsonLiteral(JsonElement element) => JsonLiteral.FromRawJson(element.GetRawText());
 
-    private static DomainVersionBumpKind ToDomain(this ContractVersionBumpKind kind) => kind switch
+    internal static DomainVersionBumpKind ToDomain(this ContractVersionBumpKind kind) => kind switch
     {
         ContractVersionBumpKind.Major => DomainVersionBumpKind.Major,
         ContractVersionBumpKind.Minor => DomainVersionBumpKind.Minor,
@@ -154,7 +154,7 @@ public static class SchemaVersionsMappingExtensions
         _ => throw new ArgumentOutOfRangeException(nameof(kind), kind, "Unknown version bump kind."),
     };
 
-    private static ContractSchemaLifecycleStatus ToContract(this DomainSchemaLifecycleStatus status) => status switch
+    internal static ContractSchemaLifecycleStatus ToContract(this DomainSchemaLifecycleStatus status) => status switch
     {
         DomainSchemaLifecycleStatus.Draft => ContractSchemaLifecycleStatus.Draft,
         DomainSchemaLifecycleStatus.Published => ContractSchemaLifecycleStatus.Published,
@@ -162,7 +162,7 @@ public static class SchemaVersionsMappingExtensions
         _ => throw new ArgumentOutOfRangeException(nameof(status), status, "Unknown schema lifecycle status."),
     };
 
-    private static DomainNodeKind ToDomain(this ContractNodeKind kind) => kind switch
+    internal static DomainNodeKind ToDomain(this ContractNodeKind kind) => kind switch
     {
         ContractNodeKind.Object => DomainNodeKind.Object,
         ContractNodeKind.Array => DomainNodeKind.Array,
@@ -174,7 +174,7 @@ public static class SchemaVersionsMappingExtensions
         _ => throw new ArgumentOutOfRangeException(nameof(kind), kind, "Unknown node kind."),
     };
 
-    private static ContractNodeKind ToContract(this DomainNodeKind kind) => kind switch
+    internal static ContractNodeKind ToContract(this DomainNodeKind kind) => kind switch
     {
         DomainNodeKind.Object => ContractNodeKind.Object,
         DomainNodeKind.Array => ContractNodeKind.Array,
@@ -186,7 +186,7 @@ public static class SchemaVersionsMappingExtensions
         _ => throw new ArgumentOutOfRangeException(nameof(kind), kind, "Unknown node kind."),
     };
 
-    private static DomainCompositionKind ToDomain(this ContractCompositionKind kind) => kind switch
+    internal static DomainCompositionKind ToDomain(this ContractCompositionKind kind) => kind switch
     {
         ContractCompositionKind.OneOf => DomainCompositionKind.OneOf,
         ContractCompositionKind.AnyOf => DomainCompositionKind.AnyOf,
@@ -195,7 +195,7 @@ public static class SchemaVersionsMappingExtensions
         _ => throw new ArgumentOutOfRangeException(nameof(kind), kind, "Unknown composition kind."),
     };
 
-    private static ContractCompositionKind ToContract(this DomainCompositionKind kind) => kind switch
+    internal static ContractCompositionKind ToContract(this DomainCompositionKind kind) => kind switch
     {
         DomainCompositionKind.OneOf => ContractCompositionKind.OneOf,
         DomainCompositionKind.AnyOf => ContractCompositionKind.AnyOf,
@@ -204,7 +204,7 @@ public static class SchemaVersionsMappingExtensions
         _ => throw new ArgumentOutOfRangeException(nameof(kind), kind, "Unknown composition kind."),
     };
 
-    private static DomainSchemaFormat ToDomain(this ContractSchemaFormat format) => format switch
+    internal static DomainSchemaFormat ToDomain(this ContractSchemaFormat format) => format switch
     {
         ContractSchemaFormat.Date => DomainSchemaFormat.Date,
         ContractSchemaFormat.DateTime => DomainSchemaFormat.DateTime,
@@ -220,7 +220,7 @@ public static class SchemaVersionsMappingExtensions
         _ => throw new ArgumentOutOfRangeException(nameof(format), format, "Unknown schema format."),
     };
 
-    private static ContractSchemaFormat ToContract(this DomainSchemaFormat format) => format switch
+    internal static ContractSchemaFormat ToContract(this DomainSchemaFormat format) => format switch
     {
         DomainSchemaFormat.Date => ContractSchemaFormat.Date,
         DomainSchemaFormat.DateTime => ContractSchemaFormat.DateTime,
@@ -236,7 +236,7 @@ public static class SchemaVersionsMappingExtensions
         _ => throw new ArgumentOutOfRangeException(nameof(format), format, "Unknown schema format."),
     };
 
-    private static ContractVersionConstraintKind ToContract(this DomainVersionConstraintKind kind) => kind switch
+    internal static ContractVersionConstraintKind ToContract(this DomainVersionConstraintKind kind) => kind switch
     {
         DomainVersionConstraintKind.ExactVersion => ContractVersionConstraintKind.ExactVersion,
         DomainVersionConstraintKind.MinimumVersion => ContractVersionConstraintKind.MinimumVersion,
@@ -244,7 +244,7 @@ public static class SchemaVersionsMappingExtensions
         _ => throw new ArgumentOutOfRangeException(nameof(kind), kind, "Unknown version constraint kind."),
     };
 
-    private static DomainNodeAttachmentKind ToDomain(this ContractNodeAttachmentKind kind) => kind switch
+    internal static DomainNodeAttachmentKind ToDomain(this ContractNodeAttachmentKind kind) => kind switch
     {
         ContractNodeAttachmentKind.ObjectProperty => DomainNodeAttachmentKind.ObjectProperty,
         ContractNodeAttachmentKind.ArrayPrefixItem => DomainNodeAttachmentKind.ArrayPrefixItem,
