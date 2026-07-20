@@ -9,6 +9,7 @@ import type {
   SchemaVersionSummaryResponse,
   UpdateSchemaNodeRequest,
 } from '@/types/schemas'
+import type { ValidateJsonPayloadResponse, ValidationRunSummaryResponse } from '@/types/validation'
 
 export const schemaVersionsApi = {
   listVersions: (schemaDefinitionId: string) =>
@@ -36,4 +37,10 @@ export const schemaVersionsApi = {
 
   deprecate: (schemaVersionId: string) =>
     httpClient.post<void>(`/api/v1/schema-versions/${schemaVersionId}/deprecate`),
+
+  validate: (schemaVersionId: string, payload: unknown) =>
+    httpClient.post<ValidateJsonPayloadResponse>(`/api/v1/schema-versions/${schemaVersionId}/validate`, payload),
+
+  listValidationRuns: (schemaVersionId: string) =>
+    httpClient.get<ValidationRunSummaryResponse[]>(`/api/v1/schema-versions/${schemaVersionId}/validation-runs`),
 }
