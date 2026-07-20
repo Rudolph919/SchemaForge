@@ -50,6 +50,29 @@ async function request<TResponse>(path: string, method: string, body?: unknown):
   return handleResponse<TResponse>(response)
 }
 
+// For endpoints returning raw generated text (export/documentation formats) rather than JSON -
+// json-schema/openapi ARE valid JSON on the wire, but typescript/csharp/markdown/html aren't, so
+// this always reads as plain text and lets the caller parse further if it wants to.
+async function requestText(path: string): Promise<string> {
+  const response = await fetch(`${API_BASE_URL}${path}`, {
+    method: 'GET',
+    headers: { ...authHeaders() },
+  })
+
+  if (response.status === 401) {
+    tokenStorage.clear()
+    window.location.href = '/login'
+    throw new ApiError(401, { title: 'Session expired' })
+  }
+
+  if (!response.ok) {
+    const problem = (await response.json().catch(() => ({}))) as ProblemDetails
+    throw new ApiError(response.status, problem)
+  }
+
+  return response.text()
+}
+
 async function upload<TResponse>(path: string, file: File): Promise<TResponse> {
   const form = new FormData()
   form.append('file', file)
@@ -70,4 +93,5 @@ export const httpClient = {
   patch: <TResponse>(path: string, body?: unknown) => request<TResponse>(path, 'PATCH', body),
   delete: <TResponse>(path: string) => request<TResponse>(path, 'DELETE'),
   upload: <TResponse>(path: string, file: File) => upload<TResponse>(path, file),
+  getText: (path: string) => requestText(path),
 }

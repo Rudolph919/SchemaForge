@@ -195,3 +195,14 @@ export interface UpdateSchemaNodeRequest {
 export interface MoveSchemaNodeRequest {
   newOrder: number
 }
+
+export interface SchemaDiffChangeResponse {
+  path: string
+  changes: string[]
+}
+
+export interface SchemaDiffResponse {
+  addedPaths: string[]
+  removedPaths: string[]
+  changedPaths: SchemaDiffChangeResponse[]
+}

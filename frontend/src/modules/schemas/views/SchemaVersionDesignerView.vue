@@ -3,7 +3,13 @@ import { computed, onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { componentsApi } from '@/modules/components-library/api/componentsApi'
 import { componentVersionsApi } from '@/modules/components-library/api/componentVersionsApi'
-import { schemaVersionsApi } from '@/modules/schemas/api/schemaVersionsApi'
+import {
+  DOCUMENTATION_FORMATS,
+  EXPORT_FORMATS,
+  schemaVersionsApi,
+  type DocumentationFormat,
+  type ExportFormat,
+} from '@/modules/schemas/api/schemaVersionsApi'
 import SchemaNodeTree from '@/modules/schemas/components/SchemaNodeTree.vue'
 import { ApiError } from '@/shared/api/httpClient'
 import Modal from '@/shared/components/Modal.vue'
@@ -12,9 +18,11 @@ import type {
   CompositionKind,
   NodeAttachmentKind,
   NodeKind,
+  SchemaDiffResponse,
   SchemaFormat,
   SchemaNodeResponse,
   SchemaVersionDetailResponse,
+  SchemaVersionSummaryResponse,
   UpdateSchemaNodeRequest,
 } from '@/types/schemas'
 import type { ValidateJsonPayloadResponse, ValidationRunSummaryResponse } from '@/types/validation'
@@ -345,7 +353,101 @@ async function toggleHistory() {
   }
 }
 
-onMounted(load)
+// --- Export ---
+const EXPORT_EXTENSIONS: Record<ExportFormat, string> = {
+  'json-schema': 'json',
+  openapi: 'json',
+  typescript: 'ts',
+  csharp: 'cs',
+}
+const exportFormat = ref<ExportFormat>('json-schema')
+const isExporting = ref(false)
+const exportError = ref<string | null>(null)
+
+function downloadText(content: string, filename: string) {
+  const url = URL.createObjectURL(new Blob([content], { type: 'text/plain' }))
+  const link = document.createElement('a')
+  link.href = url
+  link.download = filename
+  link.click()
+  URL.revokeObjectURL(url)
+}
+
+async function handleExport() {
+  exportError.value = null
+  isExporting.value = true
+  try {
+    const content = await schemaVersionsApi.export(versionId.value, exportFormat.value)
+    downloadText(content, `${version.value?.versionNumber ?? 'schema'}.${EXPORT_EXTENSIONS[exportFormat.value]}`)
+  } catch (error) {
+    exportError.value = error instanceof ApiError ? error.message : 'Could not export.'
+  } finally {
+    isExporting.value = false
+  }
+}
+
+// --- Documentation ---
+const DOCUMENTATION_MIME_TYPES: Record<DocumentationFormat, string> = {
+  html: 'text/html',
+  markdown: 'text/markdown',
+  json: 'application/json',
+}
+const documentationFormat = ref<DocumentationFormat>('html')
+const isLoadingDocumentation = ref(false)
+const documentationError = ref<string | null>(null)
+
+async function handleViewDocumentation() {
+  documentationError.value = null
+  isLoadingDocumentation.value = true
+  try {
+    const content = await schemaVersionsApi.documentation(versionId.value, documentationFormat.value)
+    // Opened as a Blob URL rather than rendered inline - html needs real page rendering, and
+    // markdown/json are just as readable as a standalone tab. Deliberately not revoking the
+    // object URL here: the new tab still needs it after this function returns.
+    window.open(URL.createObjectURL(new Blob([content], { type: DOCUMENTATION_MIME_TYPES[documentationFormat.value] })), '_blank')
+  } catch (error) {
+    documentationError.value = error instanceof ApiError ? error.message : 'Could not load documentation.'
+  } finally {
+    isLoadingDocumentation.value = false
+  }
+}
+
+// --- Diff ---
+const allVersions = ref<SchemaVersionSummaryResponse[]>([])
+const diffAgainstId = ref('')
+const diffResult = ref<SchemaDiffResponse | null>(null)
+const diffError = ref<string | null>(null)
+const isDiffing = ref(false)
+
+async function loadOtherVersions() {
+  if (!version.value) return
+  try {
+    allVersions.value = (await schemaVersionsApi.listVersions(version.value.schemaDefinitionId)).filter(
+      (v) => v.id !== versionId.value,
+    )
+  } catch {
+    // Non-fatal - the picker just stays empty.
+  }
+}
+
+async function handleDiff() {
+  if (!diffAgainstId.value) return
+  diffError.value = null
+  diffResult.value = null
+  isDiffing.value = true
+  try {
+    diffResult.value = await schemaVersionsApi.diff(versionId.value, diffAgainstId.value)
+  } catch (error) {
+    diffError.value = error instanceof ApiError ? error.message : 'Could not compute diff.'
+  } finally {
+    isDiffing.value = false
+  }
+}
+
+onMounted(async () => {
+  await load()
+  await loadOtherVersions()
+})
 </script>
 
 <template>
@@ -380,6 +482,109 @@ onMounted(load)
           @remove-node="handleRemoveNode"
           @move-node="handleMoveNode"
         />
+      </div>
+
+      <div class="mt-6 rounded-lg border border-slate-200 bg-white p-6">
+        <h2 class="text-base font-semibold text-slate-900">Export &amp; Documentation</h2>
+
+        <div class="mt-4 grid grid-cols-1 gap-6 sm:grid-cols-2">
+          <div>
+            <label for="export-format" class="block text-sm font-medium text-slate-700">Export format</label>
+            <div class="mt-1 flex gap-2">
+              <select
+                id="export-format"
+                v-model="exportFormat"
+                class="rounded-md border border-slate-300 px-2 py-1.5 text-sm focus:border-slate-500 focus:outline-none"
+              >
+                <option v-for="format in EXPORT_FORMATS" :key="format" :value="format">{{ format }}</option>
+              </select>
+              <button
+                type="button"
+                :disabled="isExporting"
+                class="rounded-md bg-slate-900 px-3 py-1.5 text-sm font-medium text-white hover:bg-slate-800 disabled:opacity-50"
+                @click="handleExport"
+              >
+                {{ isExporting ? 'Exporting…' : 'Download' }}
+              </button>
+            </div>
+            <p v-if="exportError" class="mt-2 text-sm text-red-600">{{ exportError }}</p>
+          </div>
+
+          <div>
+            <label for="documentation-format" class="block text-sm font-medium text-slate-700">Documentation format</label>
+            <div class="mt-1 flex gap-2">
+              <select
+                id="documentation-format"
+                v-model="documentationFormat"
+                class="rounded-md border border-slate-300 px-2 py-1.5 text-sm focus:border-slate-500 focus:outline-none"
+              >
+                <option v-for="format in DOCUMENTATION_FORMATS" :key="format" :value="format">{{ format }}</option>
+              </select>
+              <button
+                type="button"
+                :disabled="isLoadingDocumentation"
+                class="rounded-md bg-slate-900 px-3 py-1.5 text-sm font-medium text-white hover:bg-slate-800 disabled:opacity-50"
+                @click="handleViewDocumentation"
+              >
+                {{ isLoadingDocumentation ? 'Loading…' : 'View' }}
+              </button>
+            </div>
+            <p v-if="documentationError" class="mt-2 text-sm text-red-600">{{ documentationError }}</p>
+          </div>
+        </div>
+      </div>
+
+      <div class="mt-6 rounded-lg border border-slate-200 bg-white p-6">
+        <h2 class="text-base font-semibold text-slate-900">Compare</h2>
+        <p class="mt-1 text-sm text-slate-500">Diff this version against another version of the same schema.</p>
+
+        <div class="mt-4 flex gap-2">
+          <select
+            v-model="diffAgainstId"
+            class="rounded-md border border-slate-300 px-2 py-1.5 text-sm focus:border-slate-500 focus:outline-none"
+          >
+            <option value="">Select a version…</option>
+            <option v-for="v in allVersions" :key="v.id" :value="v.id">{{ v.versionNumber }} ({{ v.status }})</option>
+          </select>
+          <button
+            type="button"
+            :disabled="isDiffing || !diffAgainstId"
+            class="rounded-md bg-slate-900 px-3 py-1.5 text-sm font-medium text-white hover:bg-slate-800 disabled:opacity-50"
+            @click="handleDiff"
+          >
+            {{ isDiffing ? 'Comparing…' : 'Compare' }}
+          </button>
+        </div>
+        <p v-if="diffError" class="mt-2 text-sm text-red-600">{{ diffError }}</p>
+
+        <div v-if="diffResult" class="mt-4 space-y-3">
+          <div v-if="diffResult.addedPaths.length > 0">
+            <h3 class="text-xs font-semibold uppercase text-emerald-700">Added</h3>
+            <ul class="mt-1 space-y-0.5">
+              <li v-for="p in diffResult.addedPaths" :key="p" class="font-mono text-xs text-emerald-800">{{ p }}</li>
+            </ul>
+          </div>
+          <div v-if="diffResult.removedPaths.length > 0">
+            <h3 class="text-xs font-semibold uppercase text-red-700">Removed</h3>
+            <ul class="mt-1 space-y-0.5">
+              <li v-for="p in diffResult.removedPaths" :key="p" class="font-mono text-xs text-red-800">{{ p }}</li>
+            </ul>
+          </div>
+          <div v-if="diffResult.changedPaths.length > 0">
+            <h3 class="text-xs font-semibold uppercase text-amber-700">Changed</h3>
+            <ul class="mt-1 space-y-0.5">
+              <li v-for="c in diffResult.changedPaths" :key="c.path" class="font-mono text-xs text-amber-800">
+                {{ c.path }} <span class="text-slate-500">({{ c.changes.join(', ') }})</span>
+              </li>
+            </ul>
+          </div>
+          <p
+            v-if="diffResult.addedPaths.length === 0 && diffResult.removedPaths.length === 0 && diffResult.changedPaths.length === 0"
+            class="text-sm text-slate-500"
+          >
+            No differences.
+          </p>
+        </div>
       </div>
 
       <div class="mt-6 rounded-lg border border-slate-200 bg-white p-6">
