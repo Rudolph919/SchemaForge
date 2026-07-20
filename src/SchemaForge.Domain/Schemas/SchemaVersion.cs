@@ -85,35 +85,10 @@ public sealed class SchemaVersion : TenantOwnedAggregateRoot<Guid>
         var draftCheck = EnsureDraft();
         if (draftCheck.IsFailure) return Result<Guid>.Failure(draftCheck.Error);
 
-        if (string.IsNullOrWhiteSpace(propertyName))
-        {
-            return Result<Guid>.Failure(Error.Validation(
-                "SchemaNode.PropertyNameRequired", "Property name is required."));
-        }
+        var result = NodeTreeOperations.AddObjectProperty(RootNode, _localDefinitions, parentNodeId, propertyName, kind);
+        if (result.IsSuccess) RaiseDomainEvent(new SchemaNodeAdded(Id, result.Value, propertyName));
 
-        var parent = FindNode(parentNodeId);
-        if (parent is null)
-        {
-            return Result<Guid>.Failure(Error.NotFound("SchemaNode.NotFound", "No such node."));
-        }
-
-        if (parent.Kind != NodeKind.Object)
-        {
-            return Result<Guid>.Failure(Error.Validation(
-                "SchemaNode.NotAnObject", "Properties can only be added to an object node."));
-        }
-
-        if (parent.Properties.Any(p => p.PropertyName == propertyName))
-        {
-            return Result<Guid>.Failure(Error.Conflict(
-                "SchemaNode.DuplicatePropertyName", "A property with this name already exists on this node."));
-        }
-
-        var child = SchemaNode.CreateEmpty(kind, propertyName, parent.Properties.Count);
-        parent.AddProperty(child);
-        RaiseDomainEvent(new SchemaNodeAdded(Id, child.Id, propertyName));
-
-        return child.Id;
+        return result;
     }
 
     public Result<Guid> AddArrayPrefixItem(Guid parentNodeId, NodeKind? kind)
@@ -121,23 +96,10 @@ public sealed class SchemaVersion : TenantOwnedAggregateRoot<Guid>
         var draftCheck = EnsureDraft();
         if (draftCheck.IsFailure) return Result<Guid>.Failure(draftCheck.Error);
 
-        var parent = FindNode(parentNodeId);
-        if (parent is null)
-        {
-            return Result<Guid>.Failure(Error.NotFound("SchemaNode.NotFound", "No such node."));
-        }
+        var result = NodeTreeOperations.AddArrayPrefixItem(RootNode, _localDefinitions, parentNodeId, kind);
+        if (result.IsSuccess) RaiseDomainEvent(new SchemaNodeAdded(Id, result.Value, null));
 
-        if (parent.Kind != NodeKind.Array)
-        {
-            return Result<Guid>.Failure(Error.Validation(
-                "SchemaNode.NotAnArray", "Prefix items can only be added to an array node."));
-        }
-
-        var child = SchemaNode.CreateEmpty(kind, null, parent.PrefixItems.Count);
-        parent.AddPrefixItem(child);
-        RaiseDomainEvent(new SchemaNodeAdded(Id, child.Id, null));
-
-        return child.Id;
+        return result;
     }
 
     public Result<Guid> SetArrayItemsNode(Guid parentNodeId, NodeKind? kind)
@@ -145,23 +107,10 @@ public sealed class SchemaVersion : TenantOwnedAggregateRoot<Guid>
         var draftCheck = EnsureDraft();
         if (draftCheck.IsFailure) return Result<Guid>.Failure(draftCheck.Error);
 
-        var parent = FindNode(parentNodeId);
-        if (parent is null)
-        {
-            return Result<Guid>.Failure(Error.NotFound("SchemaNode.NotFound", "No such node."));
-        }
+        var result = NodeTreeOperations.SetArrayItemsNode(RootNode, _localDefinitions, parentNodeId, kind);
+        if (result.IsSuccess) RaiseDomainEvent(new SchemaNodeAdded(Id, result.Value, null));
 
-        if (parent.Kind != NodeKind.Array)
-        {
-            return Result<Guid>.Failure(Error.Validation(
-                "SchemaNode.NotAnArray", "An items schema can only be set on an array node."));
-        }
-
-        var itemsNode = SchemaNode.CreateEmpty(kind, null, 0);
-        parent.SetItemsNode(itemsNode);
-        RaiseDomainEvent(new SchemaNodeAdded(Id, itemsNode.Id, null));
-
-        return itemsNode.Id;
+        return result;
     }
 
     public Result<Guid> AddCompositionBranch(Guid parentNodeId, NodeKind? kind)
@@ -169,24 +118,10 @@ public sealed class SchemaVersion : TenantOwnedAggregateRoot<Guid>
         var draftCheck = EnsureDraft();
         if (draftCheck.IsFailure) return Result<Guid>.Failure(draftCheck.Error);
 
-        var parent = FindNode(parentNodeId);
-        if (parent is null)
-        {
-            return Result<Guid>.Failure(Error.NotFound("SchemaNode.NotFound", "No such node."));
-        }
+        var result = NodeTreeOperations.AddCompositionBranch(RootNode, _localDefinitions, parentNodeId, kind);
+        if (result.IsSuccess) RaiseDomainEvent(new SchemaNodeAdded(Id, result.Value, null));
 
-        if (parent.Composition is null)
-        {
-            return Result<Guid>.Failure(Error.Validation(
-                "SchemaNode.NoComposition",
-                "This node has no composition (oneOf/anyOf/allOf/not) set - set one before adding branches."));
-        }
-
-        var branch = SchemaNode.CreateEmpty(kind, null, parent.CompositionBranches.Count);
-        parent.AddCompositionBranch(branch);
-        RaiseDomainEvent(new SchemaNodeAdded(Id, branch.Id, null));
-
-        return branch.Id;
+        return result;
     }
 
     public Result<Guid> SetConditionalNode(Guid parentNodeId, ConditionalSlot slot, NodeKind? kind)
@@ -194,24 +129,10 @@ public sealed class SchemaVersion : TenantOwnedAggregateRoot<Guid>
         var draftCheck = EnsureDraft();
         if (draftCheck.IsFailure) return Result<Guid>.Failure(draftCheck.Error);
 
-        var parent = FindNode(parentNodeId);
-        if (parent is null)
-        {
-            return Result<Guid>.Failure(Error.NotFound("SchemaNode.NotFound", "No such node."));
-        }
+        var result = NodeTreeOperations.SetConditionalNode(RootNode, _localDefinitions, parentNodeId, slot, kind);
+        if (result.IsSuccess) RaiseDomainEvent(new SchemaNodeAdded(Id, result.Value, null));
 
-        var node = SchemaNode.CreateEmpty(kind, null, 0);
-        switch (slot)
-        {
-            case ConditionalSlot.If: parent.SetIfNode(node); break;
-            case ConditionalSlot.Then: parent.SetThenNode(node); break;
-            case ConditionalSlot.Else: parent.SetElseNode(node); break;
-            default: throw new ArgumentOutOfRangeException(nameof(slot), slot, null);
-        }
-
-        RaiseDomainEvent(new SchemaNodeAdded(Id, node.Id, null));
-
-        return node.Id;
+        return result;
     }
 
     public Result UpdateNode(Guid nodeId, SchemaNodeContent content)
@@ -219,16 +140,10 @@ public sealed class SchemaVersion : TenantOwnedAggregateRoot<Guid>
         var draftCheck = EnsureDraft();
         if (draftCheck.IsFailure) return draftCheck;
 
-        var node = FindNode(nodeId);
-        if (node is null)
-        {
-            return Result.Failure(Error.NotFound("SchemaNode.NotFound", "No such node."));
-        }
+        var result = NodeTreeOperations.UpdateNode(RootNode, _localDefinitions, nodeId, content);
+        if (result.IsSuccess) RaiseDomainEvent(new SchemaNodeUpdated(Id, nodeId));
 
-        node.ApplyContent(content);
-        RaiseDomainEvent(new SchemaNodeUpdated(Id, nodeId));
-
-        return Result.Success();
+        return result;
     }
 
     // Reorder among existing siblings only (Step 6 §2.4's "move" endpoint) - not reparenting to
@@ -240,21 +155,10 @@ public sealed class SchemaVersion : TenantOwnedAggregateRoot<Guid>
         var draftCheck = EnsureDraft();
         if (draftCheck.IsFailure) return draftCheck;
 
-        if (nodeId == RootNode.Id)
-        {
-            return Result.Failure(Error.Validation("SchemaNode.CannotMoveRoot", "The root node cannot be reordered."));
-        }
+        var result = NodeTreeOperations.MoveNode(RootNode, _localDefinitions, nodeId, newOrder);
+        if (result.IsSuccess) RaiseDomainEvent(new SchemaNodeUpdated(Id, nodeId));
 
-        var node = FindNode(nodeId);
-        if (node is null)
-        {
-            return Result.Failure(Error.NotFound("SchemaNode.NotFound", "No such node."));
-        }
-
-        node.Reorder(newOrder);
-        RaiseDomainEvent(new SchemaNodeUpdated(Id, nodeId));
-
-        return Result.Success();
+        return result;
     }
 
     public Result RemoveNode(Guid nodeId)
@@ -262,22 +166,10 @@ public sealed class SchemaVersion : TenantOwnedAggregateRoot<Guid>
         var draftCheck = EnsureDraft();
         if (draftCheck.IsFailure) return draftCheck;
 
-        if (nodeId == RootNode.Id)
-        {
-            return Result.Failure(Error.Validation("SchemaNode.CannotRemoveRoot", "The root node cannot be removed."));
-        }
+        var result = NodeTreeOperations.RemoveNode(RootNode, _localDefinitions, nodeId);
+        if (result.IsSuccess) RaiseDomainEvent(new SchemaNodeRemoved(Id, nodeId));
 
-        var removed = RootNode.TryRemoveDescendant(nodeId)
-            || _localDefinitions.Any(d => d.RootNode.TryRemoveDescendant(nodeId));
-
-        if (!removed)
-        {
-            return Result.Failure(Error.NotFound("SchemaNode.NotFound", "No such node."));
-        }
-
-        RaiseDomainEvent(new SchemaNodeRemoved(Id, nodeId));
-
-        return Result.Success();
+        return result;
     }
 
     public Result<Guid> AddLocalDefinition(string name, NodeKind? rootKind)
@@ -285,22 +177,7 @@ public sealed class SchemaVersion : TenantOwnedAggregateRoot<Guid>
         var draftCheck = EnsureDraft();
         if (draftCheck.IsFailure) return Result<Guid>.Failure(draftCheck.Error);
 
-        if (string.IsNullOrWhiteSpace(name))
-        {
-            return Result<Guid>.Failure(Error.Validation(
-                "LocalDefinition.NameRequired", "Local definition name is required."));
-        }
-
-        if (_localDefinitions.Any(d => d.Name == name))
-        {
-            return Result<Guid>.Failure(Error.Conflict(
-                "LocalDefinition.DuplicateName", "A local definition with this name already exists."));
-        }
-
-        var definition = LocalDefinition.Create(name, rootKind);
-        _localDefinitions.Add(definition);
-
-        return definition.Id;
+        return NodeTreeOperations.AddLocalDefinition(_localDefinitions, name, rootKind);
     }
 
     public Result RemoveLocalDefinition(Guid localDefinitionId)
@@ -308,16 +185,8 @@ public sealed class SchemaVersion : TenantOwnedAggregateRoot<Guid>
         var draftCheck = EnsureDraft();
         if (draftCheck.IsFailure) return draftCheck;
 
-        var removed = _localDefinitions.RemoveAll(d => d.Id == localDefinitionId) > 0;
-
-        return removed
-            ? Result.Success()
-            : Result.Failure(Error.NotFound("LocalDefinition.NotFound", "No such local definition."));
+        return NodeTreeOperations.RemoveLocalDefinition(_localDefinitions, localDefinitionId);
     }
-
-    private SchemaNode? FindNode(Guid nodeId) =>
-        RootNode.FindDescendant(nodeId)
-        ?? _localDefinitions.Select(d => d.RootNode.FindDescendant(nodeId)).FirstOrDefault(n => n is not null);
 
     private Result EnsureDraft() => Status == SchemaLifecycleStatus.Draft
         ? Result.Success()
