@@ -8,6 +8,7 @@ const authStore = useAuthStore()
 
 const navLinks = [
   { to: '/projects', label: 'Projects' },
+  { to: '/components', label: 'Components' },
   { to: '/teams', label: 'Teams' },
   { to: '/members', label: 'Members' },
   { to: '/settings', label: 'Settings' },

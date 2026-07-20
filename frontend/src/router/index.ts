@@ -36,6 +36,21 @@ const router = createRouter({
           component: () => import('@/modules/schemas/views/SchemaVersionDesignerView.vue'),
         },
         {
+          path: 'components',
+          name: 'component-library',
+          component: () => import('@/modules/components-library/views/ComponentLibraryView.vue'),
+        },
+        {
+          path: 'components/:componentId',
+          name: 'component-detail',
+          component: () => import('@/modules/components-library/views/ComponentDetailView.vue'),
+        },
+        {
+          path: 'component-versions/:componentVersionId',
+          name: 'component-version-designer',
+          component: () => import('@/modules/components-library/views/ComponentVersionDesignerView.vue'),
+        },
+        {
           path: 'teams',
           name: 'teams',
           component: () => import('@/modules/organizations/views/TeamsListView.vue'),
