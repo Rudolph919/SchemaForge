@@ -7,6 +7,7 @@ using SchemaForge.Api.Mapping;
 using SchemaForge.Application.Schemas.Commands.AddSchemaNode;
 using SchemaForge.Application.Schemas.Commands.CreateSchemaVersion;
 using SchemaForge.Application.Schemas.Commands.DeprecateSchemaVersion;
+using SchemaForge.Application.Schemas.Commands.ImportSchemaVersion;
 using SchemaForge.Application.Schemas.Commands.MoveSchemaNode;
 using SchemaForge.Application.Schemas.Commands.PublishSchemaVersion;
 using SchemaForge.Application.Schemas.Commands.RemoveSchemaNode;
@@ -31,6 +32,19 @@ public sealed class SchemaVersionsController(ISender sender) : ControllerBase
     {
         var result = await sender.Send(request.ToCommand(schemaId), cancellationToken);
         return result.ToActionResult(r => r.ToResponse());
+    }
+
+    // Raw JSON Schema document as the body (matching /validate's [FromBody] JsonElement pattern),
+    // bumpKind/changeSummary as query params - the same "create a new Draft" shape as
+    // POST .../versions, just populated from an existing document instead of starting empty.
+    [HttpPost("api/v1/schemas/{schemaId:guid}/import")]
+    public async Task<IActionResult> Import(
+        Guid schemaId, [FromBody] JsonElement schemaDocument, [FromQuery] VersionBumpKind bumpKind,
+        [FromQuery] string? changeSummary, CancellationToken cancellationToken)
+    {
+        var result = await sender.Send(
+            new ImportSchemaVersionCommand(schemaId, schemaDocument, bumpKind.ToDomain(), changeSummary), cancellationToken);
+        return result.ToActionResult(r => new CreateSchemaVersionResponse(r.SchemaVersionId, r.VersionNumber.ToString()));
     }
 
     [HttpGet("api/v1/schemas/{schemaId:guid}/versions")]
