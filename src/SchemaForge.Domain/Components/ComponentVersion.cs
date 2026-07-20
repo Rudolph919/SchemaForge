@@ -1,17 +1,19 @@
-using SchemaForge.Domain.Schemas.Events;
+using SchemaForge.Domain.Components.Events;
+using SchemaForge.Domain.Schemas;
 using SchemaForge.SharedKernel;
 using SchemaForge.SharedKernel.Primitives;
 
-namespace SchemaForge.Domain.Schemas;
+namespace SchemaForge.Domain.Components;
 
-// One aggregate instance per version ever created (Step 3 §2) - separate from SchemaDefinition
-// specifically so an unbounded, ever-growing version history never has to load into memory for
-// a metadata-only operation like renaming the schema. This is where the SchemaNode tree
-// actually lives, and where immutability-after-publish is enforced at the method level (every
-// mutating method below guards on Status == Draft), not just by convention.
-public sealed class SchemaVersion : TenantOwnedAggregateRoot<Guid>
+// Same shape as SchemaVersion, deliberately - Step 4 §5: "no new concepts." Reuses SchemaNode/
+// LocalDefinition directly (a ComponentVersion's RootNode can itself hold ComponentReferences to
+// other components, e.g. an InvoiceLineItem component referencing a MoneyAmount component) and
+// the same NodeTreeOperations helper for all tree mutation, per Step 7 §3's shared-implementation
+// note - only the draft-guard, domain events, and parent identity (ComponentDefinitionId instead
+// of SchemaDefinitionId) actually differ from SchemaVersion.
+public sealed class ComponentVersion : TenantOwnedAggregateRoot<Guid>
 {
-    public Guid SchemaDefinitionId { get; private set; }
+    public Guid ComponentDefinitionId { get; private set; }
 
     public SemVer VersionNumber { get; private set; } = null!;
 
@@ -26,27 +28,26 @@ public sealed class SchemaVersion : TenantOwnedAggregateRoot<Guid>
     private List<LocalDefinition> _localDefinitions = [];
     public IReadOnlyList<LocalDefinition> LocalDefinitions => _localDefinitions;
 
-    private SchemaVersion() { } // EF Core materialization
+    private ComponentVersion() { } // EF Core materialization
 
-    private SchemaVersion(Guid id, Guid organizationId, Guid schemaDefinitionId, SemVer versionNumber, string? changeSummary)
+    private ComponentVersion(
+        Guid id, Guid organizationId, Guid componentDefinitionId, SemVer versionNumber, string? changeSummary)
         : base(id, organizationId)
     {
-        SchemaDefinitionId = schemaDefinitionId;
+        ComponentDefinitionId = componentDefinitionId;
         VersionNumber = versionNumber;
         ChangeSummary = changeSummary;
         Status = SchemaLifecycleStatus.Draft;
         RootNode = SchemaNode.CreateEmpty(NodeKind.Object, null, 0);
     }
 
-    // Only-one-Draft-at-a-time and monotonic version numbering (Step 3 §4) are enforced at the
-    // Application layer (a domain service queries existing versions first) and backed by a
-    // Postgres partial unique index as the actual concurrency-safe guarantee - this factory
-    // itself just builds a valid Draft from whatever version number it's given.
-    public static SchemaVersion CreateDraft(
-        Guid organizationId, Guid schemaDefinitionId, SemVer versionNumber, string? changeSummary = null)
+    // Only-one-Draft-at-a-time and monotonic version numbering enforced the same way as
+    // SchemaVersion (Application-layer check backed by a Postgres partial unique index).
+    public static ComponentVersion CreateDraft(
+        Guid organizationId, Guid componentDefinitionId, SemVer versionNumber, string? changeSummary = null)
     {
-        var version = new SchemaVersion(Guid.NewGuid(), organizationId, schemaDefinitionId, versionNumber, changeSummary);
-        version.RaiseDomainEvent(new SchemaVersionCreated(schemaDefinitionId, version.Id, versionNumber));
+        var version = new ComponentVersion(Guid.NewGuid(), organizationId, componentDefinitionId, versionNumber, changeSummary);
+        version.RaiseDomainEvent(new ComponentVersionCreated(componentDefinitionId, version.Id, versionNumber));
 
         return version;
     }
@@ -56,12 +57,12 @@ public sealed class SchemaVersion : TenantOwnedAggregateRoot<Guid>
         if (Status != SchemaLifecycleStatus.Draft)
         {
             return Result.Failure(Error.Validation(
-                "SchemaVersion.NotDraft", "Only a Draft version can be published."));
+                "ComponentVersion.NotDraft", "Only a Draft version can be published."));
         }
 
         Status = SchemaLifecycleStatus.Published;
         PublishedAt = DateTimeOffset.UtcNow;
-        RaiseDomainEvent(new SchemaVersionPublished(SchemaDefinitionId, Id));
+        RaiseDomainEvent(new ComponentVersionPublished(ComponentDefinitionId, Id));
 
         return Result.Success();
     }
@@ -71,11 +72,11 @@ public sealed class SchemaVersion : TenantOwnedAggregateRoot<Guid>
         if (Status != SchemaLifecycleStatus.Published)
         {
             return Result.Failure(Error.Validation(
-                "SchemaVersion.NotPublished", "Only a Published version can be deprecated."));
+                "ComponentVersion.NotPublished", "Only a Published version can be deprecated."));
         }
 
         Status = SchemaLifecycleStatus.Deprecated;
-        RaiseDomainEvent(new SchemaVersionDeprecated(SchemaDefinitionId, Id));
+        RaiseDomainEvent(new ComponentVersionDeprecated(ComponentDefinitionId, Id));
 
         return Result.Success();
     }
@@ -86,7 +87,7 @@ public sealed class SchemaVersion : TenantOwnedAggregateRoot<Guid>
         if (draftCheck.IsFailure) return Result<Guid>.Failure(draftCheck.Error);
 
         var result = NodeTreeOperations.AddObjectProperty(RootNode, _localDefinitions, parentNodeId, propertyName, kind);
-        if (result.IsSuccess) RaiseDomainEvent(new SchemaNodeAdded(Id, result.Value, propertyName));
+        if (result.IsSuccess) RaiseDomainEvent(new ComponentNodeAdded(Id, result.Value, propertyName));
 
         return result;
     }
@@ -97,7 +98,7 @@ public sealed class SchemaVersion : TenantOwnedAggregateRoot<Guid>
         if (draftCheck.IsFailure) return Result<Guid>.Failure(draftCheck.Error);
 
         var result = NodeTreeOperations.AddArrayPrefixItem(RootNode, _localDefinitions, parentNodeId, kind);
-        if (result.IsSuccess) RaiseDomainEvent(new SchemaNodeAdded(Id, result.Value, null));
+        if (result.IsSuccess) RaiseDomainEvent(new ComponentNodeAdded(Id, result.Value, null));
 
         return result;
     }
@@ -108,7 +109,7 @@ public sealed class SchemaVersion : TenantOwnedAggregateRoot<Guid>
         if (draftCheck.IsFailure) return Result<Guid>.Failure(draftCheck.Error);
 
         var result = NodeTreeOperations.SetArrayItemsNode(RootNode, _localDefinitions, parentNodeId, kind);
-        if (result.IsSuccess) RaiseDomainEvent(new SchemaNodeAdded(Id, result.Value, null));
+        if (result.IsSuccess) RaiseDomainEvent(new ComponentNodeAdded(Id, result.Value, null));
 
         return result;
     }
@@ -119,7 +120,7 @@ public sealed class SchemaVersion : TenantOwnedAggregateRoot<Guid>
         if (draftCheck.IsFailure) return Result<Guid>.Failure(draftCheck.Error);
 
         var result = NodeTreeOperations.AddCompositionBranch(RootNode, _localDefinitions, parentNodeId, kind);
-        if (result.IsSuccess) RaiseDomainEvent(new SchemaNodeAdded(Id, result.Value, null));
+        if (result.IsSuccess) RaiseDomainEvent(new ComponentNodeAdded(Id, result.Value, null));
 
         return result;
     }
@@ -130,7 +131,7 @@ public sealed class SchemaVersion : TenantOwnedAggregateRoot<Guid>
         if (draftCheck.IsFailure) return Result<Guid>.Failure(draftCheck.Error);
 
         var result = NodeTreeOperations.SetConditionalNode(RootNode, _localDefinitions, parentNodeId, slot, kind);
-        if (result.IsSuccess) RaiseDomainEvent(new SchemaNodeAdded(Id, result.Value, null));
+        if (result.IsSuccess) RaiseDomainEvent(new ComponentNodeAdded(Id, result.Value, null));
 
         return result;
     }
@@ -141,22 +142,18 @@ public sealed class SchemaVersion : TenantOwnedAggregateRoot<Guid>
         if (draftCheck.IsFailure) return draftCheck;
 
         var result = NodeTreeOperations.UpdateNode(RootNode, _localDefinitions, nodeId, content);
-        if (result.IsSuccess) RaiseDomainEvent(new SchemaNodeUpdated(Id, nodeId));
+        if (result.IsSuccess) RaiseDomainEvent(new ComponentNodeUpdated(Id, nodeId));
 
         return result;
     }
 
-    // Reorder among existing siblings only (Step 6 §2.4's "move" endpoint) - not reparenting to
-    // a different node. Reparenting would mean detaching from one attachment point and
-    // reattaching at another while preserving the node's id/content, a materially riskier
-    // operation than resequencing a list; scoped out until a real need for it shows up.
     public Result MoveNode(Guid nodeId, int newOrder)
     {
         var draftCheck = EnsureDraft();
         if (draftCheck.IsFailure) return draftCheck;
 
         var result = NodeTreeOperations.MoveNode(RootNode, _localDefinitions, nodeId, newOrder);
-        if (result.IsSuccess) RaiseDomainEvent(new SchemaNodeUpdated(Id, nodeId));
+        if (result.IsSuccess) RaiseDomainEvent(new ComponentNodeUpdated(Id, nodeId));
 
         return result;
     }
@@ -167,7 +164,7 @@ public sealed class SchemaVersion : TenantOwnedAggregateRoot<Guid>
         if (draftCheck.IsFailure) return draftCheck;
 
         var result = NodeTreeOperations.RemoveNode(RootNode, _localDefinitions, nodeId);
-        if (result.IsSuccess) RaiseDomainEvent(new SchemaNodeRemoved(Id, nodeId));
+        if (result.IsSuccess) RaiseDomainEvent(new ComponentNodeRemoved(Id, nodeId));
 
         return result;
     }
@@ -191,5 +188,5 @@ public sealed class SchemaVersion : TenantOwnedAggregateRoot<Guid>
     private Result EnsureDraft() => Status == SchemaLifecycleStatus.Draft
         ? Result.Success()
         : Result.Failure(Error.Validation(
-            "SchemaVersion.NotDraft", "Only a Draft version can be modified."));
+            "ComponentVersion.NotDraft", "Only a Draft version can be modified."));
 }
