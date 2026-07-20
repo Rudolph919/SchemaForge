@@ -4,6 +4,7 @@ using Microsoft.EntityFrameworkCore;
 using Npgsql;
 using SchemaForge.Application.Common.Abstractions;
 using SchemaForge.Contracts.V1.Auth;
+using SchemaForge.Domain.Components;
 using SchemaForge.Domain.Schemas;
 using SchemaForge.Domain.Validation;
 using SchemaForge.Domain.Workspaces;
@@ -178,6 +179,50 @@ public sealed class RowLevelSecurityTests(PostgresFixture postgres) : IAsyncLife
         visible.Should().NotContain(orgA.OrganizationId);
     }
 
+    // component_definitions/component_versions got the same hand-added RLS policy SQL as every
+    // other table when their migration was written (Phase 3) - same proof-not-just-inspection
+    // reasoning as the schema_*/validation_runs tests above.
+    [Fact]
+    public async Task RLS_blocks_a_cross_tenant_component_definition_read_even_with_the_EF_Core_filter_explicitly_bypassed()
+    {
+        var orgA = await RegisterAsync("Org A");
+        var orgB = await RegisterAsync("Org B");
+
+        await CreateComponentDefinitionAsync(orgA.OrganizationId, "Org A's Component");
+
+        var tenantContext = new FixedTenantContext(orgB.OrganizationId);
+        var options = new DbContextOptionsBuilder<SchemaForgeDbContext>()
+            .UseNpgsql(postgres.AppConnectionString)
+            .AddInterceptors(new TenantSessionConnectionInterceptor(tenantContext))
+            .Options;
+        await using var dbContext = new SchemaForgeDbContext(options, tenantContext);
+
+        var visible = await dbContext.ComponentDefinitions.IgnoreQueryFilters().Select(d => d.OrganizationId).ToListAsync();
+
+        visible.Should().NotContain(orgA.OrganizationId);
+    }
+
+    [Fact]
+    public async Task RLS_blocks_a_cross_tenant_component_version_read_even_with_the_EF_Core_filter_explicitly_bypassed()
+    {
+        var orgA = await RegisterAsync("Org A");
+        var orgB = await RegisterAsync("Org B");
+
+        var componentDefinitionId = await CreateComponentDefinitionAsync(orgA.OrganizationId, "Org A's Component");
+        await CreateComponentDraftVersionAsync(orgA.OrganizationId, componentDefinitionId);
+
+        var tenantContext = new FixedTenantContext(orgB.OrganizationId);
+        var options = new DbContextOptionsBuilder<SchemaForgeDbContext>()
+            .UseNpgsql(postgres.AppConnectionString)
+            .AddInterceptors(new TenantSessionConnectionInterceptor(tenantContext))
+            .Options;
+        await using var dbContext = new SchemaForgeDbContext(options, tenantContext);
+
+        var visible = await dbContext.ComponentVersions.IgnoreQueryFilters().Select(v => v.OrganizationId).ToListAsync();
+
+        visible.Should().NotContain(orgA.OrganizationId);
+    }
+
     [Fact]
     public async Task RLS_allows_a_raw_SQL_write_to_the_matching_tenants_own_row()
     {
@@ -263,6 +308,36 @@ public sealed class RowLevelSecurityTests(PostgresFixture postgres) : IAsyncLife
         var run = ValidationRun.Record(organizationId, projectId, schemaVersionId, "deadbeef", [], executedByUserId);
         dbContext.ValidationRuns.Add(run);
         await dbContext.SaveChangesAsync();
+    }
+
+    private async Task<Guid> CreateComponentDefinitionAsync(Guid organizationId, string name)
+    {
+        var tenantContext = new FixedTenantContext(organizationId);
+        var options = new DbContextOptionsBuilder<SchemaForgeDbContext>()
+            .UseNpgsql(postgres.AppConnectionString)
+            .AddInterceptors(new TenantSessionConnectionInterceptor(tenantContext))
+            .Options;
+
+        await using var dbContext = new SchemaForgeDbContext(options, tenantContext);
+        var componentDefinition = ComponentDefinition.Create(organizationId, name);
+        dbContext.ComponentDefinitions.Add(componentDefinition);
+        await dbContext.SaveChangesAsync();
+        return componentDefinition.Id;
+    }
+
+    private async Task<Guid> CreateComponentDraftVersionAsync(Guid organizationId, Guid componentDefinitionId)
+    {
+        var tenantContext = new FixedTenantContext(organizationId);
+        var options = new DbContextOptionsBuilder<SchemaForgeDbContext>()
+            .UseNpgsql(postgres.AppConnectionString)
+            .AddInterceptors(new TenantSessionConnectionInterceptor(tenantContext))
+            .Options;
+
+        await using var dbContext = new SchemaForgeDbContext(options, tenantContext);
+        var version = ComponentVersion.CreateDraft(organizationId, componentDefinitionId, SemVer.Initial);
+        dbContext.ComponentVersions.Add(version);
+        await dbContext.SaveChangesAsync();
+        return version.Id;
     }
 
     private static async Task SetTenantSessionVariableAsync(NpgsqlConnection connection, Guid tenantId)
