@@ -21,6 +21,16 @@ const router = createRouter({
           component: () => import('@/modules/workspaces/views/ProjectDetailView.vue'),
         },
         {
+          path: 'projects/:projectId/schemas',
+          name: 'schema-library',
+          component: () => import('@/modules/schemas/views/SchemaLibraryView.vue'),
+        },
+        {
+          path: 'schemas/:schemaId',
+          name: 'schema-detail',
+          component: () => import('@/modules/schemas/views/SchemaDetailView.vue'),
+        },
+        {
           path: 'teams',
           name: 'teams',
           component: () => import('@/modules/organizations/views/TeamsListView.vue'),
