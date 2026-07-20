@@ -1,30 +1,30 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { componentsApi } from '@/modules/components-library/api/componentsApi'
 import { componentVersionsApi } from '@/modules/components-library/api/componentVersionsApi'
-import { schemaVersionsApi } from '@/modules/schemas/api/schemaVersionsApi'
 import SchemaNodeTree from '@/modules/schemas/components/SchemaNodeTree.vue'
 import { ApiError } from '@/shared/api/httpClient'
 import Modal from '@/shared/components/Modal.vue'
-import type { ComponentDefinitionSummaryResponse, ComponentVersionSummaryResponse } from '@/types/components'
 import type {
   CompositionKind,
   NodeAttachmentKind,
   NodeKind,
   SchemaFormat,
   SchemaNodeResponse,
-  SchemaVersionDetailResponse,
   UpdateSchemaNodeRequest,
 } from '@/types/schemas'
-import type { ValidateJsonPayloadResponse, ValidationRunSummaryResponse } from '@/types/validation'
+import type { ComponentVersionDetailResponse } from '@/types/components'
 
+// Reuses SchemaNodeTree.vue directly - the node-tree shape and editing UX are identical to the
+// Schema Designer (types/components.ts's ComponentVersionDetailResponse.rootNode is literally a
+// SchemaNodeResponse). This file otherwise mirrors SchemaVersionDesignerView.vue closely; kept as
+// a separate component rather than factored into a shared composable to move quickly - the two
+// designers differ in their API client, route param name, and the absence of a Validate panel
+// (ValidationRun is Schema-specific), which made a parameterized extraction more ceremony than
+// the duplication it would save right now.
 const ADDABLE_KINDS: NodeKind[] = ['Object', 'Array', 'String', 'Number', 'Integer', 'Boolean', 'Null']
 const COMPOSITION_KINDS: CompositionKind[] = ['OneOf', 'AnyOf', 'AllOf', 'Not']
 
-// Local definitions (within-version reuse for recursive schemas) have no Application command or
-// Api endpoint yet - only the Domain method (SchemaVersion.AddLocalDefinition) exists. Wiring
-// them up is backend work first, so they're out of scope for this frontend-only slice.
 const ATTACHMENT_LABELS: Record<NodeAttachmentKind, string> = {
   ObjectProperty: 'Property',
   ArrayPrefixItem: 'Prefix Item',
@@ -50,9 +50,9 @@ const FORMATS: SchemaFormat[] = [
 
 const route = useRoute()
 const router = useRouter()
-const versionId = computed(() => route.params.versionId as string)
+const versionId = computed(() => route.params.componentVersionId as string)
 
-const version = ref<SchemaVersionDetailResponse | null>(null)
+const version = ref<ComponentVersionDetailResponse | null>(null)
 const loadError = ref<string | null>(null)
 const actionError = ref<string | null>(null)
 
@@ -61,13 +61,13 @@ const isEditable = computed(() => version.value?.status === 'Draft')
 async function load() {
   loadError.value = null
   try {
-    version.value = await schemaVersionsApi.getVersion(versionId.value)
+    version.value = await componentVersionsApi.getVersion(versionId.value)
   } catch (error) {
-    loadError.value = error instanceof ApiError ? error.message : 'Could not load schema version.'
+    loadError.value = error instanceof ApiError ? error.message : 'Could not load component version.'
   }
 }
 
-// --- Attach node (property / prefix item / items / composition branch / if / then / else) ---
+// --- Attach node ---
 const addParentId = ref<string | null>(null)
 const addAttachmentKind = ref<NodeAttachmentKind>('ObjectProperty')
 const addPropertyName = ref('')
@@ -88,7 +88,7 @@ async function handleAttachNode() {
   addError.value = null
   isAdding.value = true
   try {
-    await schemaVersionsApi.addNode(versionId.value, {
+    await componentVersionsApi.addNode(versionId.value, {
       parentNodeId: addParentId.value,
       attachmentKind: addAttachmentKind.value,
       propertyName: addAttachmentKind.value === 'ObjectProperty' ? addPropertyName.value : null,
@@ -129,49 +129,6 @@ const editUniqueItems = ref(false)
 const editError = ref<string | null>(null)
 const isSavingNode = ref(false)
 
-// --- Component reference picker ---
-// Only "Latest" is supported here, not an exact/minimum version pin - keeps the picker to two
-// dropdowns (component, then one of its Published versions) instead of a third constraint-kind
-// control. Reverse-resolving an existing reference's component/version pair isn't attempted (no
-// "which component owns this version" lookup exists) - editReferenceVersionId is seeded from the
-// node's current reference either way, so leaving the pickers untouched preserves it correctly;
-// picking a new component/version just overwrites it.
-const allComponents = ref<ComponentDefinitionSummaryResponse[]>([])
-const editReferenceComponentId = ref('')
-const editReferenceVersionId = ref('')
-const referenceVersions = ref<ComponentVersionSummaryResponse[]>([])
-const isLoadingReferenceVersions = ref(false)
-
-async function ensureComponentsLoaded() {
-  if (allComponents.value.length > 0) return
-  try {
-    allComponents.value = await componentsApi.listComponents()
-  } catch {
-    // Non-fatal - the picker just stays empty; the rest of node editing still works.
-  }
-}
-
-async function handleReferenceComponentChange() {
-  editReferenceVersionId.value = ''
-  referenceVersions.value = []
-  if (!editReferenceComponentId.value) return
-  isLoadingReferenceVersions.value = true
-  try {
-    const versions = await componentVersionsApi.listVersions(editReferenceComponentId.value)
-    referenceVersions.value = versions.filter((v) => v.status === 'Published')
-  } catch {
-    // Non-fatal
-  } finally {
-    isLoadingReferenceVersions.value = false
-  }
-}
-
-function clearReference() {
-  editReferenceComponentId.value = ''
-  editReferenceVersionId.value = ''
-  referenceVersions.value = []
-}
-
 function openEditNode(node: SchemaNodeResponse) {
   editingNode.value = node
   editDescription.value = node.description ?? ''
@@ -195,11 +152,7 @@ function openEditNode(node: SchemaNodeResponse) {
   editMinItems.value = node.arrayConstraints?.minItems ?? null
   editMaxItems.value = node.arrayConstraints?.maxItems ?? null
   editUniqueItems.value = node.arrayConstraints?.uniqueItems ?? false
-  editReferenceComponentId.value = ''
-  editReferenceVersionId.value = node.componentReference?.componentVersionId ?? ''
-  referenceVersions.value = []
   editError.value = null
-  void ensureComponentsLoaded()
 }
 
 async function handleSaveNode() {
@@ -214,16 +167,15 @@ async function handleSaveNode() {
       notes: editNotes.value || null,
       isNullable: editNullable.value,
       isRequiredByParent: editRequired.value,
-      // Not editable in this slice - round-trip whatever the node already has.
       examples: node.examples,
       defaultValue: node.defaultValue,
       allowedValues: node.allowedValues,
       constValue: node.constValue,
       dependentRequired: node.dependentRequired,
       composition: editComposition.value || null,
-      componentReference: editReferenceVersionId.value
-        ? { componentVersionId: editReferenceVersionId.value, constraint: { kind: 'Latest', version: null } }
-        : null,
+      // Component-to-component references aren't editable in this slice, same as
+      // examples/defaultValue/etc above - round-tripped as-is.
+      componentReference: node.componentReference,
       localDefinitionRef: node.localDefinitionRef,
       objectConstraints:
         node.kind === 'Object'
@@ -259,7 +211,7 @@ async function handleSaveNode() {
           : null,
     }
 
-    await schemaVersionsApi.updateNode(versionId.value, node.id, request)
+    await componentVersionsApi.updateNode(versionId.value, node.id, request)
     editingNode.value = null
     await load()
   } catch (error) {
@@ -273,16 +225,13 @@ async function handleSaveNode() {
 async function handleRemoveNode(node: SchemaNodeResponse) {
   actionError.value = null
   try {
-    await schemaVersionsApi.removeNode(versionId.value, node.id)
+    await componentVersionsApi.removeNode(versionId.value, node.id)
     await load()
   } catch (error) {
     actionError.value = error instanceof ApiError ? error.message : 'Could not remove node.'
   }
 }
 
-// MoveNode sets a node's Order to exactly the value it's given - it doesn't renumber siblings
-// (Step 6 §2.4's "reorder, not reparent" scope). A true swap needs both nodes' orders exchanged
-// via two sequential calls, or repeated moves would eventually collide on duplicate order values.
 async function handleMoveNode(node: SchemaNodeResponse, direction: 'up' | 'down', siblings: SchemaNodeResponse[]) {
   const sorted = [...siblings].sort((a, b) => a.order - b.order)
   const index = sorted.findIndex((n) => n.id === node.id)
@@ -292,56 +241,11 @@ async function handleMoveNode(node: SchemaNodeResponse, direction: 'up' | 'down'
 
   actionError.value = null
   try {
-    await schemaVersionsApi.moveNode(versionId.value, node.id, { newOrder: partner.order })
-    await schemaVersionsApi.moveNode(versionId.value, partner.id, { newOrder: node.order })
+    await componentVersionsApi.moveNode(versionId.value, node.id, { newOrder: partner.order })
+    await componentVersionsApi.moveNode(versionId.value, partner.id, { newOrder: node.order })
     await load()
   } catch (error) {
     actionError.value = error instanceof ApiError ? error.message : 'Could not move node.'
-  }
-}
-
-// --- Validate ---
-const validatePayloadText = ref('{\n  \n}')
-const validateResult = ref<ValidateJsonPayloadResponse | null>(null)
-const validateError = ref<string | null>(null)
-const isValidating = ref(false)
-const validationRuns = ref<ValidationRunSummaryResponse[]>([])
-const isHistoryOpen = ref(false)
-
-async function handleValidate() {
-  validateError.value = null
-  validateResult.value = null
-  let payload: unknown
-  try {
-    payload = JSON.parse(validatePayloadText.value)
-  } catch {
-    validateError.value = 'Not valid JSON.'
-    return
-  }
-
-  isValidating.value = true
-  try {
-    validateResult.value = await schemaVersionsApi.validate(versionId.value, payload)
-    if (isHistoryOpen.value) await loadValidationRuns()
-  } catch (error) {
-    validateError.value = error instanceof ApiError ? error.message : 'Could not run validation.'
-  } finally {
-    isValidating.value = false
-  }
-}
-
-async function loadValidationRuns() {
-  try {
-    validationRuns.value = await schemaVersionsApi.listValidationRuns(versionId.value)
-  } catch (error) {
-    validateError.value = error instanceof ApiError ? error.message : 'Could not load validation history.'
-  }
-}
-
-async function toggleHistory() {
-  isHistoryOpen.value = !isHistoryOpen.value
-  if (isHistoryOpen.value && validationRuns.value.length === 0) {
-    await loadValidationRuns()
   }
 }
 
@@ -351,7 +255,7 @@ onMounted(load)
 <template>
   <div>
     <button type="button" class="text-sm text-slate-500 hover:text-slate-700" @click="router.back()">
-      ← Back to Schema
+      ← Back to Component
     </button>
 
     <p v-if="loadError" class="mt-4 text-sm text-red-600">{{ loadError }}</p>
@@ -380,71 +284,6 @@ onMounted(load)
           @remove-node="handleRemoveNode"
           @move-node="handleMoveNode"
         />
-      </div>
-
-      <div class="mt-6 rounded-lg border border-slate-200 bg-white p-6">
-        <h2 class="text-base font-semibold text-slate-900">Validate</h2>
-        <p class="mt-1 text-sm text-slate-500">
-          Check a JSON payload against this version. Persists a validation run either way.
-        </p>
-
-        <form class="mt-4" @submit.prevent="handleValidate">
-          <textarea
-            v-model="validatePayloadText"
-            rows="8"
-            spellcheck="false"
-            class="w-full rounded-md border border-slate-300 px-3 py-2 font-mono text-sm focus:border-slate-500 focus:outline-none"
-          />
-          <button
-            type="submit"
-            :disabled="isValidating"
-            class="mt-2 rounded-md bg-slate-900 px-3 py-1.5 text-sm font-medium text-white hover:bg-slate-800 disabled:opacity-50"
-          >
-            {{ isValidating ? 'Validating…' : 'Validate' }}
-          </button>
-        </form>
-
-        <p v-if="validateError" class="mt-3 text-sm text-red-600">{{ validateError }}</p>
-
-        <div v-if="validateResult" class="mt-4 rounded-md border border-slate-100 p-3">
-          <span
-            class="rounded-full px-2 py-0.5 text-xs font-medium"
-            :class="validateResult.outcome === 'Valid' ? 'bg-emerald-100 text-emerald-800' : 'bg-red-100 text-red-800'"
-          >
-            {{ validateResult.outcome }}
-          </span>
-          <ul v-if="validateResult.errors.length > 0" class="mt-2 space-y-1 text-sm">
-            <li v-for="(err, i) in validateResult.errors" :key="i" class="text-slate-700">
-              <span class="font-mono text-xs text-slate-500">{{ err.path }}</span>
-              — {{ err.message }}
-              <span class="text-xs text-slate-400">({{ err.code }}{{ err.severity === 'Warning' ? ', warning' : '' }})</span>
-            </li>
-          </ul>
-        </div>
-
-        <button type="button" class="mt-4 text-sm text-slate-500 hover:text-slate-700" @click="toggleHistory">
-          {{ isHistoryOpen ? 'Hide' : 'Show' }} validation history
-        </button>
-
-        <table v-if="isHistoryOpen" class="mt-3 w-full text-sm">
-          <tbody>
-            <tr v-if="validationRuns.length === 0">
-              <td class="py-2 text-slate-500">No validation runs yet.</td>
-            </tr>
-            <tr v-for="run in validationRuns" :key="run.id" class="border-b border-slate-100 last:border-0">
-              <td class="py-2">
-                <span
-                  class="rounded-full px-2 py-0.5 text-xs font-medium"
-                  :class="run.outcome === 'Valid' ? 'bg-emerald-100 text-emerald-800' : 'bg-red-100 text-red-800'"
-                >
-                  {{ run.outcome }}
-                </span>
-              </td>
-              <td class="py-2 text-slate-500">{{ run.errors.length }} {{ run.errors.length === 1 ? 'error' : 'errors' }}</td>
-              <td class="py-2 text-right text-slate-400">{{ new Date(run.executedAt).toLocaleString() }}</td>
-            </tr>
-          </tbody>
-        </table>
       </div>
     </template>
 
@@ -526,50 +365,6 @@ onMounted(load)
             <option value="">None</option>
             <option v-for="kind in COMPOSITION_KINDS" :key="kind" :value="kind">{{ kind }}</option>
           </select>
-        </div>
-
-        <div>
-          <label class="block text-sm font-medium text-slate-700">
-            Reusable Component <span class="text-slate-400">(optional)</span>
-          </label>
-          <p v-if="editReferenceVersionId && !editReferenceComponentId" class="mt-1 text-xs text-slate-500">
-            Currently references version <span class="font-mono">{{ editReferenceVersionId }}</span>. Pick a
-            component below to point at a different one, or clear it.
-          </p>
-          <div class="mt-1 grid grid-cols-2 gap-3">
-            <select
-              v-model="editReferenceComponentId"
-              class="rounded-md border border-slate-300 px-2 py-1.5 text-sm focus:border-slate-500 focus:outline-none"
-              @change="handleReferenceComponentChange"
-            >
-              <option value="">Select a component…</option>
-              <option v-for="c in allComponents" :key="c.id" :value="c.id">{{ c.name }}</option>
-            </select>
-            <select
-              v-if="editReferenceComponentId"
-              v-model="editReferenceVersionId"
-              class="rounded-md border border-slate-300 px-2 py-1.5 text-sm focus:border-slate-500 focus:outline-none"
-            >
-              <option value="" disabled>
-                {{
-                  isLoadingReferenceVersions
-                    ? 'Loading…'
-                    : referenceVersions.length === 0
-                      ? 'No published versions'
-                      : 'Select version'
-                }}
-              </option>
-              <option v-for="v in referenceVersions" :key="v.id" :value="v.id">{{ v.versionNumber }}</option>
-            </select>
-          </div>
-          <button
-            v-if="editReferenceVersionId"
-            type="button"
-            class="mt-1 text-xs text-slate-500 hover:text-red-600"
-            @click="clearReference"
-          >
-            Clear reference
-          </button>
         </div>
 
         <template v-if="editingNode.kind === 'String'">
