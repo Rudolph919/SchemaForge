@@ -31,6 +31,11 @@ const router = createRouter({
           component: () => import('@/modules/schemas/views/SchemaDetailView.vue'),
         },
         {
+          path: 'schema-versions/:versionId',
+          name: 'schema-version-designer',
+          component: () => import('@/modules/schemas/views/SchemaVersionDesignerView.vue'),
+        },
+        {
           path: 'teams',
           name: 'teams',
           component: () => import('@/modules/organizations/views/TeamsListView.vue'),

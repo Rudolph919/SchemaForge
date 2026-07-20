@@ -269,7 +269,10 @@ onMounted(load)
                 </span>
               </td>
               <td class="py-2 text-slate-500">{{ version.changeSummary ?? '—' }}</td>
-              <td class="py-2 text-right">
+              <td class="space-x-3 py-2 text-right">
+                <router-link :to="`/schema-versions/${version.id}`" class="text-slate-500 hover:text-slate-900">
+                  {{ version.status === 'Draft' ? 'Edit' : 'View' }}
+                </router-link>
                 <button
                   v-if="version.status === 'Draft'"
                   type="button"
