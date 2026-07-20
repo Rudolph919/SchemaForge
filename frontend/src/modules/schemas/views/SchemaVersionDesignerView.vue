@@ -14,6 +14,7 @@ import type {
   SchemaVersionDetailResponse,
   UpdateSchemaNodeRequest,
 } from '@/types/schemas'
+import type { ValidateJsonPayloadResponse, ValidationRunSummaryResponse } from '@/types/validation'
 
 const ADDABLE_KINDS: NodeKind[] = ['Object', 'Array', 'String', 'Number', 'Integer', 'Boolean', 'Null']
 const COMPOSITION_KINDS: CompositionKind[] = ['OneOf', 'AnyOf', 'AllOf', 'Not']
@@ -247,6 +248,51 @@ async function handleMoveNode(node: SchemaNodeResponse, direction: 'up' | 'down'
   }
 }
 
+// --- Validate ---
+const validatePayloadText = ref('{\n  \n}')
+const validateResult = ref<ValidateJsonPayloadResponse | null>(null)
+const validateError = ref<string | null>(null)
+const isValidating = ref(false)
+const validationRuns = ref<ValidationRunSummaryResponse[]>([])
+const isHistoryOpen = ref(false)
+
+async function handleValidate() {
+  validateError.value = null
+  validateResult.value = null
+  let payload: unknown
+  try {
+    payload = JSON.parse(validatePayloadText.value)
+  } catch {
+    validateError.value = 'Not valid JSON.'
+    return
+  }
+
+  isValidating.value = true
+  try {
+    validateResult.value = await schemaVersionsApi.validate(versionId.value, payload)
+    if (isHistoryOpen.value) await loadValidationRuns()
+  } catch (error) {
+    validateError.value = error instanceof ApiError ? error.message : 'Could not run validation.'
+  } finally {
+    isValidating.value = false
+  }
+}
+
+async function loadValidationRuns() {
+  try {
+    validationRuns.value = await schemaVersionsApi.listValidationRuns(versionId.value)
+  } catch (error) {
+    validateError.value = error instanceof ApiError ? error.message : 'Could not load validation history.'
+  }
+}
+
+async function toggleHistory() {
+  isHistoryOpen.value = !isHistoryOpen.value
+  if (isHistoryOpen.value && validationRuns.value.length === 0) {
+    await loadValidationRuns()
+  }
+}
+
 onMounted(load)
 </script>
 
@@ -282,6 +328,71 @@ onMounted(load)
           @remove-node="handleRemoveNode"
           @move-node="handleMoveNode"
         />
+      </div>
+
+      <div class="mt-6 rounded-lg border border-slate-200 bg-white p-6">
+        <h2 class="text-base font-semibold text-slate-900">Validate</h2>
+        <p class="mt-1 text-sm text-slate-500">
+          Check a JSON payload against this version. Persists a validation run either way.
+        </p>
+
+        <form class="mt-4" @submit.prevent="handleValidate">
+          <textarea
+            v-model="validatePayloadText"
+            rows="8"
+            spellcheck="false"
+            class="w-full rounded-md border border-slate-300 px-3 py-2 font-mono text-sm focus:border-slate-500 focus:outline-none"
+          />
+          <button
+            type="submit"
+            :disabled="isValidating"
+            class="mt-2 rounded-md bg-slate-900 px-3 py-1.5 text-sm font-medium text-white hover:bg-slate-800 disabled:opacity-50"
+          >
+            {{ isValidating ? 'Validating…' : 'Validate' }}
+          </button>
+        </form>
+
+        <p v-if="validateError" class="mt-3 text-sm text-red-600">{{ validateError }}</p>
+
+        <div v-if="validateResult" class="mt-4 rounded-md border border-slate-100 p-3">
+          <span
+            class="rounded-full px-2 py-0.5 text-xs font-medium"
+            :class="validateResult.outcome === 'Valid' ? 'bg-emerald-100 text-emerald-800' : 'bg-red-100 text-red-800'"
+          >
+            {{ validateResult.outcome }}
+          </span>
+          <ul v-if="validateResult.errors.length > 0" class="mt-2 space-y-1 text-sm">
+            <li v-for="(err, i) in validateResult.errors" :key="i" class="text-slate-700">
+              <span class="font-mono text-xs text-slate-500">{{ err.path }}</span>
+              — {{ err.message }}
+              <span class="text-xs text-slate-400">({{ err.code }}{{ err.severity === 'Warning' ? ', warning' : '' }})</span>
+            </li>
+          </ul>
+        </div>
+
+        <button type="button" class="mt-4 text-sm text-slate-500 hover:text-slate-700" @click="toggleHistory">
+          {{ isHistoryOpen ? 'Hide' : 'Show' }} validation history
+        </button>
+
+        <table v-if="isHistoryOpen" class="mt-3 w-full text-sm">
+          <tbody>
+            <tr v-if="validationRuns.length === 0">
+              <td class="py-2 text-slate-500">No validation runs yet.</td>
+            </tr>
+            <tr v-for="run in validationRuns" :key="run.id" class="border-b border-slate-100 last:border-0">
+              <td class="py-2">
+                <span
+                  class="rounded-full px-2 py-0.5 text-xs font-medium"
+                  :class="run.outcome === 'Valid' ? 'bg-emerald-100 text-emerald-800' : 'bg-red-100 text-red-800'"
+                >
+                  {{ run.outcome }}
+                </span>
+              </td>
+              <td class="py-2 text-slate-500">{{ run.errors.length }} {{ run.errors.length === 1 ? 'error' : 'errors' }}</td>
+              <td class="py-2 text-right text-slate-400">{{ new Date(run.executedAt).toLocaleString() }}</td>
+            </tr>
+          </tbody>
+        </table>
       </div>
     </template>
 
