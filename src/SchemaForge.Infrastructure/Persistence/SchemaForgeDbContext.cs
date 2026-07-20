@@ -1,5 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using SchemaForge.Application.Common.Abstractions;
+using SchemaForge.Domain.Components;
 using SchemaForge.Domain.Identity;
 using SchemaForge.Domain.Organizations;
 using SchemaForge.Domain.Schemas;
@@ -30,6 +31,10 @@ public sealed class SchemaForgeDbContext(
 
     public DbSet<ValidationRun> ValidationRuns => Set<ValidationRun>();
 
+    public DbSet<ComponentDefinition> ComponentDefinitions => Set<ComponentDefinition>();
+
+    public DbSet<ComponentVersion> ComponentVersions => Set<ComponentVersion>();
+
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         modelBuilder.HasPostgresExtension("citext");
@@ -58,5 +63,9 @@ public sealed class SchemaForgeDbContext(
             .HasQueryFilter(v => v.OrganizationId == tenantContext.CurrentTenantId);
         modelBuilder.Entity<ValidationRun>()
             .HasQueryFilter(r => r.OrganizationId == tenantContext.CurrentTenantId);
+        modelBuilder.Entity<ComponentDefinition>()
+            .HasQueryFilter(d => d.OrganizationId == tenantContext.CurrentTenantId);
+        modelBuilder.Entity<ComponentVersion>()
+            .HasQueryFilter(v => v.OrganizationId == tenantContext.CurrentTenantId);
     }
 }
