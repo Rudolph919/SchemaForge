@@ -23,6 +23,7 @@ public static class ApplicationServiceCollectionExtensions
         services.AddSingleton<ISchemaExporter, OpenApiExporter>();
         services.AddSingleton<ISchemaExporter, TypeScriptExporter>();
         services.AddSingleton<ISchemaExporter, CSharpExporter>();
+        services.AddSingleton<IJsonSchemaImporter, JsonSchemaImporter>();
 
         services.AddMediatR(cfg =>
         {
