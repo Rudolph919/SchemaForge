@@ -16,6 +16,14 @@ public static class ResultExtensions
             ? new NoContentResult()
             : CreateProblemResult(result.Error);
 
+    // For endpoints returning raw generated text (export/documentation formats) rather than a
+    // Contracts DTO to be JSON-serialized - ToActionResult would wrap a string in quotes as a
+    // JSON string value, not return it as the document itself.
+    public static IActionResult ToContentActionResult(this Result<string> result, string contentType) =>
+        result.IsSuccess
+            ? new ContentResult { Content = result.Value, ContentType = contentType, StatusCode = StatusCodes.Status200OK }
+            : CreateProblemResult(result.Error);
+
     private static ObjectResult CreateProblemResult(Error error)
     {
         var statusCode = error.Type switch

@@ -13,6 +13,7 @@ using SchemaForge.Application.Schemas.Commands.RemoveSchemaNode;
 using SchemaForge.Application.Schemas.Commands.UpdateSchemaNode;
 using SchemaForge.Application.Schemas.Queries.GetSchemaDiff;
 using SchemaForge.Application.Schemas.Queries.GetSchemaVersion;
+using SchemaForge.Application.Schemas.Queries.GetSchemaVersionExport;
 using SchemaForge.Application.Schemas.Queries.ListSchemaVersions;
 using SchemaForge.Application.Validation.Commands.ValidateJsonPayload;
 using SchemaForge.Application.Validation.Queries.ListValidationRuns;
@@ -116,5 +117,21 @@ public sealed class SchemaVersionsController(ISender sender) : ControllerBase
     {
         var result = await sender.Send(new GetSchemaDiffQuery(schemaVersionId, against), cancellationToken);
         return result.ToActionResult(d => d.ToResponse());
+    }
+
+    private static readonly Dictionary<string, string> ExportContentTypes = new()
+    {
+        ["json-schema"] = "application/schema+json",
+        ["openapi"] = "application/json",
+        ["typescript"] = "text/plain",
+        ["csharp"] = "text/plain",
+    };
+
+    [HttpGet("api/v1/schema-versions/{schemaVersionId:guid}/export")]
+    public async Task<IActionResult> Export(
+        Guid schemaVersionId, [FromQuery] string format, CancellationToken cancellationToken)
+    {
+        var result = await sender.Send(new GetSchemaVersionExportQuery(schemaVersionId, format), cancellationToken);
+        return result.ToContentActionResult(ExportContentTypes.GetValueOrDefault(format, "text/plain"));
     }
 }
