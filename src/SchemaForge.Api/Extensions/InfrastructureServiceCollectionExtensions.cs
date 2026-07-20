@@ -6,6 +6,7 @@ using SchemaForge.Application.Organizations;
 using SchemaForge.Application.Schemas;
 using SchemaForge.Application.Validation;
 using SchemaForge.Application.Workspaces;
+using SchemaForge.Infrastructure.Caching;
 using SchemaForge.Infrastructure.Persistence;
 using SchemaForge.Infrastructure.Persistence.Interceptors;
 using SchemaForge.Infrastructure.Persistence.Repositories;
@@ -54,6 +55,17 @@ public static class InfrastructureServiceCollectionExtensions
 
         services.Configure<StorageSettings>(configuration.GetSection("Storage"));
         services.AddSingleton<IFileStorage, MinioFileStorage>();
+
+        // Backs the documentation cache (Step 1 §9, Step 6 §2.4) - genuinely S3-API-compatible-style
+        // swap-behind-an-interface story via IDistributedCache, same as IFileStorage's own seam.
+        services.AddStackExchangeRedisCache(options =>
+        {
+            options.Configuration = configuration.GetConnectionString("Redis");
+            // A shared local Redis instance may back more than one project's dev environment -
+            // this keeps every key this app writes namespaced, not just "safe in production."
+            options.InstanceName = "schemaforge:";
+        });
+        services.AddSingleton<IDocumentationCache, RedisDocumentationCache>();
 
         return services;
     }
