@@ -4,6 +4,7 @@ using SchemaForge.Application.Components;
 using SchemaForge.Application.Identity;
 using SchemaForge.Application.Organizations;
 using SchemaForge.Application.Schemas;
+using SchemaForge.Application.Testing;
 using SchemaForge.Application.Validation;
 using SchemaForge.Application.Workspaces;
 using SchemaForge.Infrastructure.Caching;
@@ -47,6 +48,7 @@ public static class InfrastructureServiceCollectionExtensions
         services.AddScoped<IValidationRunRepository, ValidationRunRepository>();
         services.AddScoped<IComponentDefinitionRepository, ComponentDefinitionRepository>();
         services.AddScoped<IComponentVersionRepository, ComponentVersionRepository>();
+        services.AddScoped<ITestSuiteRepository, TestSuiteRepository>();
         services.AddScoped<IUnitOfWork, UnitOfWork>();
 
         services.AddScoped<IPasswordHasher, IdentityPasswordHasher>();

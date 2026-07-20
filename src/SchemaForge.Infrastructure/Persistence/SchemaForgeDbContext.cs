@@ -4,6 +4,7 @@ using SchemaForge.Domain.Components;
 using SchemaForge.Domain.Identity;
 using SchemaForge.Domain.Organizations;
 using SchemaForge.Domain.Schemas;
+using SchemaForge.Domain.Testing;
 using SchemaForge.Domain.Validation;
 using SchemaForge.Domain.Workspaces;
 
@@ -34,6 +35,8 @@ public sealed class SchemaForgeDbContext(
     public DbSet<ComponentDefinition> ComponentDefinitions => Set<ComponentDefinition>();
 
     public DbSet<ComponentVersion> ComponentVersions => Set<ComponentVersion>();
+
+    public DbSet<TestSuite> TestSuites => Set<TestSuite>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -67,5 +70,7 @@ public sealed class SchemaForgeDbContext(
             .HasQueryFilter(d => d.OrganizationId == tenantContext.CurrentTenantId);
         modelBuilder.Entity<ComponentVersion>()
             .HasQueryFilter(v => v.OrganizationId == tenantContext.CurrentTenantId);
+        modelBuilder.Entity<TestSuite>()
+            .HasQueryFilter(s => s.OrganizationId == tenantContext.CurrentTenantId);
     }
 }
