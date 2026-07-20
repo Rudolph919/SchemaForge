@@ -1,17 +1,17 @@
 using MediatR;
+using SchemaForge.Application.Common;
+using SchemaForge.Application.Components;
 using SchemaForge.SharedKernel;
 
 namespace SchemaForge.Application.Schemas.Commands.PublishSchemaVersion;
 
-// Step 3 §4: publish must fail if any ComponentReference in the tree doesn't resolve to a
-// Published ComponentVersion. Not implemented here - ComponentDefinition/ComponentVersion don't
-// exist as queryable aggregates yet (that's Phase 3, per the roadmap); a SchemaNode can already
-// carry a ComponentReference value object today (Step 4 §4.3), but nothing has a way to look one
-// up. Revisit this handler when Phase 3 lands: resolve every ComponentVersionId referenced
-// anywhere in the tree, verify each is Published, fail with a Conflict before calling
-// version.Publish() if any doesn't resolve - same two-layer pattern as every other cross-
-// aggregate invariant in this codebase.
-public sealed class PublishSchemaVersionHandler(ISchemaVersionRepository schemaVersionRepository)
+// Step 3 §4: publish fails if any ComponentReference anywhere in the tree doesn't resolve to a
+// Published ComponentVersion - now that Phase 3 gives ComponentVersion a queryable repository,
+// ComponentReferenceValidation.EnsureAllReferencesArePublishedAsync (shared with
+// PublishComponentVersionHandler, since a ComponentVersion's own tree can reference other
+// components too) does the actual walk-and-check.
+public sealed class PublishSchemaVersionHandler(
+    ISchemaVersionRepository schemaVersionRepository, IComponentVersionRepository componentVersionRepository)
     : IRequestHandler<PublishSchemaVersionCommand, Result>
 {
     public async Task<Result> Handle(PublishSchemaVersionCommand request, CancellationToken cancellationToken)
@@ -20,6 +20,13 @@ public sealed class PublishSchemaVersionHandler(ISchemaVersionRepository schemaV
         if (version is null)
         {
             return Result.Failure(Error.NotFound("SchemaVersion.NotFound", "No such schema version."));
+        }
+
+        var referenceCheck = await ComponentReferenceValidation.EnsureAllReferencesArePublishedAsync(
+            version.RootNode, version.LocalDefinitions, componentVersionRepository, cancellationToken);
+        if (referenceCheck.IsFailure)
+        {
+            return referenceCheck;
         }
 
         return version.Publish();
