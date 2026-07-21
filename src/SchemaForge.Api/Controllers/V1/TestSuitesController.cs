@@ -38,6 +38,11 @@ public sealed class TestSuitesController(ISender sender) : ControllerBase
     public async Task<IActionResult> Get(Guid testSuiteId, CancellationToken cancellationToken)
     {
         var result = await sender.Send(new GetTestSuiteQuery(testSuiteId), cancellationToken);
+        if (result.IsSuccess)
+        {
+            Response.SetETag(result.Value.RowVersion);
+        }
+
         return result.ToActionResult(d => d.ToResponse());
     }
 
@@ -45,7 +50,12 @@ public sealed class TestSuitesController(ISender sender) : ControllerBase
     public async Task<IActionResult> UpdateDetails(
         Guid testSuiteId, UpdateTestSuiteDetailsRequest request, CancellationToken cancellationToken)
     {
-        var result = await sender.Send(request.ToCommand(testSuiteId), cancellationToken);
+        if (!Request.TryGetIfMatch(out var expectedVersion))
+        {
+            return ConcurrencyExtensions.PreconditionRequired();
+        }
+
+        var result = await sender.Send(request.ToCommand(testSuiteId, expectedVersion), cancellationToken);
         return result.ToActionResult();
     }
 

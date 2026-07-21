@@ -7,13 +7,15 @@ namespace SchemaForge.Domain.Testing;
 // meant to be re-run against version 1.0.0 today and 1.1.0 tomorrow (regression testing across
 // versions), which each TestRun records via its own SchemaVersionId rather than the suite
 // pinning to one.
-public sealed class TestSuite : TenantOwnedAggregateRoot<Guid>
+public sealed class TestSuite : TenantOwnedAggregateRoot<Guid>, IHasRowVersion
 {
     public Guid SchemaDefinitionId { get; private set; }
 
     public string Name { get; private set; } = null!;
 
     public string? Description { get; private set; }
+
+    public uint RowVersion { get; private set; }
 
     private readonly List<TestCase> _cases = [];
     public IReadOnlyList<TestCase> Cases => _cases.AsReadOnly();

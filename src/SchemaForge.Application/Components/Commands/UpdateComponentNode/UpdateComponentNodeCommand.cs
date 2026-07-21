@@ -4,4 +4,5 @@ using SchemaForge.SharedKernel;
 
 namespace SchemaForge.Application.Components.Commands.UpdateComponentNode;
 
-public sealed record UpdateComponentNodeCommand(Guid ComponentVersionId, Guid NodeId, SchemaNodeContent Content) : ICommand<Result>;
+public sealed record UpdateComponentNodeCommand(
+    Guid ComponentVersionId, Guid NodeId, SchemaNodeContent Content, uint ExpectedVersion) : ICommand<Result>;

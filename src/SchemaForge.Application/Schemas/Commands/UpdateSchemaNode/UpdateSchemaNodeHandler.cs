@@ -14,6 +14,12 @@ public sealed class UpdateSchemaNodeHandler(ISchemaVersionRepository schemaVersi
             return Result.Failure(Error.NotFound("SchemaVersion.NotFound", "No such schema version."));
         }
 
-        return version.UpdateNode(request.NodeId, request.Content);
+        var result = version.UpdateNode(request.NodeId, request.Content);
+        if (result.IsSuccess)
+        {
+            schemaVersionRepository.ApplyExpectedVersion(version, request.ExpectedVersion);
+        }
+
+        return result;
     }
 }

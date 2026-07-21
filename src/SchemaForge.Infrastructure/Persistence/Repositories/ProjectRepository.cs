@@ -18,4 +18,7 @@ public sealed class ProjectRepository(SchemaForgeDbContext dbContext) : IProject
 
     public async Task AddAsync(Project project, CancellationToken cancellationToken) =>
         await dbContext.Projects.AddAsync(project, cancellationToken);
+
+    public void ApplyExpectedVersion(Project project, uint expectedVersion) =>
+        dbContext.ApplyExpectedVersion(project, expectedVersion);
 }

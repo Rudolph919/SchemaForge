@@ -23,8 +23,9 @@ public static class TestingMappingExtensions
 
     public static CreateTestSuiteResponse ToResponse(this CreateTestSuiteResult result) => new(result.TestSuiteId);
 
-    public static UpdateTestSuiteDetailsCommand ToCommand(this UpdateTestSuiteDetailsRequest request, Guid testSuiteId) =>
-        new(testSuiteId, request.Name, request.Description);
+    public static UpdateTestSuiteDetailsCommand ToCommand(
+        this UpdateTestSuiteDetailsRequest request, Guid testSuiteId, uint expectedVersion) =>
+        new(testSuiteId, request.Name, request.Description, expectedVersion);
 
     public static TestSuiteSummaryResponse ToResponse(this TestSuiteSummary summary) =>
         new(summary.Id, summary.Name, summary.Description, summary.CaseCount);

@@ -3,4 +3,5 @@ using SchemaForge.SharedKernel;
 
 namespace SchemaForge.Application.Testing.Commands.UpdateTestSuiteDetails;
 
-public sealed record UpdateTestSuiteDetailsCommand(Guid TestSuiteId, string Name, string? Description) : ICommand<Result>;
+public sealed record UpdateTestSuiteDetailsCommand(Guid TestSuiteId, string Name, string? Description, uint ExpectedVersion)
+    : ICommand<Result>;

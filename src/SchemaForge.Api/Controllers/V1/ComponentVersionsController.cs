@@ -45,6 +45,11 @@ public sealed class ComponentVersionsController(ISender sender) : ControllerBase
     public async Task<IActionResult> Get(Guid componentVersionId, CancellationToken cancellationToken)
     {
         var result = await sender.Send(new GetComponentVersionQuery(componentVersionId), cancellationToken);
+        if (result.IsSuccess)
+        {
+            Response.SetETag(result.Value.RowVersion);
+        }
+
         return result.ToActionResult(d => d.ToResponse());
     }
 
@@ -60,15 +65,27 @@ public sealed class ComponentVersionsController(ISender sender) : ControllerBase
     public async Task<IActionResult> UpdateNode(
         Guid componentVersionId, Guid nodeId, UpdateSchemaNodeRequest request, CancellationToken cancellationToken)
     {
+        if (!Request.TryGetIfMatch(out var expectedVersion))
+        {
+            return ConcurrencyExtensions.PreconditionRequired();
+        }
+
         var result = await sender.Send(
-            new UpdateComponentNodeCommand(componentVersionId, nodeId, request.ToDomain()), cancellationToken);
+            new UpdateComponentNodeCommand(componentVersionId, nodeId, request.ToDomain(), expectedVersion),
+            cancellationToken);
         return result.ToActionResult();
     }
 
     [HttpDelete("api/v1/component-versions/{componentVersionId:guid}/nodes/{nodeId:guid}")]
     public async Task<IActionResult> RemoveNode(Guid componentVersionId, Guid nodeId, CancellationToken cancellationToken)
     {
-        var result = await sender.Send(new RemoveComponentNodeCommand(componentVersionId, nodeId), cancellationToken);
+        if (!Request.TryGetIfMatch(out var expectedVersion))
+        {
+            return ConcurrencyExtensions.PreconditionRequired();
+        }
+
+        var result = await sender.Send(
+            new RemoveComponentNodeCommand(componentVersionId, nodeId, expectedVersion), cancellationToken);
         return result.ToActionResult();
     }
 

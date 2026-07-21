@@ -6,13 +6,15 @@ namespace SchemaForge.Domain.Schemas;
 // cheap to load (Step 3 §2). The actual schema structure lives in SchemaVersion, a separate
 // aggregate root, specifically so renaming a schema never has to touch its (potentially large,
 // ever-growing) version history.
-public sealed class SchemaDefinition : TenantOwnedAggregateRoot<Guid>
+public sealed class SchemaDefinition : TenantOwnedAggregateRoot<Guid>, IHasRowVersion
 {
     public Guid ProjectId { get; private set; }
 
     public string Name { get; private set; } = null!;
 
     public string? Description { get; private set; }
+
+    public uint RowVersion { get; private set; }
 
     private List<string> _tags = [];
     public IReadOnlyList<string> Tags => _tags;

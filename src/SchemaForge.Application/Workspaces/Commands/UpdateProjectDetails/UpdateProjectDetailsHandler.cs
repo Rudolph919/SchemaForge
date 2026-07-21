@@ -34,6 +34,7 @@ public sealed class UpdateProjectDetailsHandler(IProjectRepository projectReposi
         }
 
         project.UpdateDescription(request.Description);
+        projectRepository.ApplyExpectedVersion(project, request.ExpectedVersion);
 
         return Result.Success();
     }

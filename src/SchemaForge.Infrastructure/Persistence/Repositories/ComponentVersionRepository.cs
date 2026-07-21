@@ -39,4 +39,7 @@ public sealed class ComponentVersionRepository(SchemaForgeDbContext dbContext) :
 
     public async Task AddAsync(ComponentVersion version, CancellationToken cancellationToken) =>
         await dbContext.ComponentVersions.AddAsync(version, cancellationToken);
+
+    public void ApplyExpectedVersion(ComponentVersion version, uint expectedVersion) =>
+        dbContext.ApplyExpectedVersion(version, expectedVersion);
 }

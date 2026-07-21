@@ -16,6 +16,8 @@ public interface IComponentVersionRepository
     Task<SemVer?> GetLatestVersionNumberAsync(Guid componentDefinitionId, CancellationToken cancellationToken);
 
     Task AddAsync(ComponentVersion version, CancellationToken cancellationToken);
+
+    void ApplyExpectedVersion(ComponentVersion version, uint expectedVersion);
 }
 
 public sealed record ComponentVersionSummary(

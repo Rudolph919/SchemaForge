@@ -14,6 +14,12 @@ public sealed class RemoveComponentNodeHandler(IComponentVersionRepository compo
             return Result.Failure(Error.NotFound("ComponentVersion.NotFound", "No such component version."));
         }
 
-        return version.RemoveNode(request.NodeId);
+        var result = version.RemoveNode(request.NodeId);
+        if (result.IsSuccess)
+        {
+            componentVersionRepository.ApplyExpectedVersion(version, request.ExpectedVersion);
+        }
+
+        return result;
     }
 }

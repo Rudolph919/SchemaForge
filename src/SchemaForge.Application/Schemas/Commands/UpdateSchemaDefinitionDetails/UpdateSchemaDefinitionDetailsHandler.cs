@@ -34,6 +34,7 @@ public sealed class UpdateSchemaDefinitionDetailsHandler(ISchemaDefinitionReposi
 
         definition.UpdateDescription(request.Description);
         definition.UpdateTags(request.Tags);
+        schemaDefinitionRepository.ApplyExpectedVersion(definition, request.ExpectedVersion);
 
         return Result.Success();
     }

@@ -3,4 +3,4 @@ using SchemaForge.SharedKernel;
 
 namespace SchemaForge.Application.Schemas.Commands.RemoveSchemaNode;
 
-public sealed record RemoveSchemaNodeCommand(Guid SchemaVersionId, Guid NodeId) : ICommand<Result>;
+public sealed record RemoveSchemaNodeCommand(Guid SchemaVersionId, Guid NodeId, uint ExpectedVersion) : ICommand<Result>;

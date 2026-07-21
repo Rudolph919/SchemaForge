@@ -11,7 +11,7 @@ public class UpdateSchemaDefinitionDetailsValidatorTests
     public void Valid_command_passes()
     {
         var result = _validator.Validate(
-            new UpdateSchemaDefinitionDetailsCommand(Guid.NewGuid(), "Invoice Schema", "Vendor invoices", ["finance"]));
+            new UpdateSchemaDefinitionDetailsCommand(Guid.NewGuid(), "Invoice Schema", "Vendor invoices", ["finance"], 1));
 
         result.IsValid.Should().BeTrue();
     }
@@ -22,7 +22,7 @@ public class UpdateSchemaDefinitionDetailsValidatorTests
     public void Blank_name_fails(string name)
     {
         var result = _validator.Validate(
-            new UpdateSchemaDefinitionDetailsCommand(Guid.NewGuid(), name, null, []));
+            new UpdateSchemaDefinitionDetailsCommand(Guid.NewGuid(), name, null, [], 1));
 
         result.IsValid.Should().BeFalse();
     }
@@ -31,7 +31,7 @@ public class UpdateSchemaDefinitionDetailsValidatorTests
     public void Blank_tag_fails()
     {
         var result = _validator.Validate(
-            new UpdateSchemaDefinitionDetailsCommand(Guid.NewGuid(), "Invoice Schema", null, [""]));
+            new UpdateSchemaDefinitionDetailsCommand(Guid.NewGuid(), "Invoice Schema", null, [""], 1));
 
         result.IsValid.Should().BeFalse();
     }

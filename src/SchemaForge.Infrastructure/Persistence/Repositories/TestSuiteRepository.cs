@@ -23,4 +23,7 @@ public sealed class TestSuiteRepository(SchemaForgeDbContext dbContext) : ITestS
 
     public async Task AddAsync(TestSuite suite, CancellationToken cancellationToken) =>
         await dbContext.TestSuites.AddAsync(suite, cancellationToken);
+
+    public void ApplyExpectedVersion(TestSuite suite, uint expectedVersion) =>
+        dbContext.ApplyExpectedVersion(suite, expectedVersion);
 }

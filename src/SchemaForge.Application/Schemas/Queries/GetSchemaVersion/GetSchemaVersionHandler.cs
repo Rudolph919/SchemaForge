@@ -18,6 +18,7 @@ public sealed class GetSchemaVersionHandler(ISchemaVersionRepository schemaVersi
 
         return new SchemaVersionDetail(
             version.Id, version.SchemaDefinitionId, version.VersionNumber, version.Status,
-            version.ChangeSummary, version.PublishedAt, version.RootNode, version.LocalDefinitions);
+            version.ChangeSummary, version.PublishedAt, version.RootNode, version.LocalDefinitions,
+            version.RowVersion);
     }
 }

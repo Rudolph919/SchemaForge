@@ -11,7 +11,7 @@ namespace SchemaForge.Domain.Components;
 // the same NodeTreeOperations helper for all tree mutation, per Step 7 §3's shared-implementation
 // note - only the draft-guard, domain events, and parent identity (ComponentDefinitionId instead
 // of SchemaDefinitionId) actually differ from SchemaVersion.
-public sealed class ComponentVersion : TenantOwnedAggregateRoot<Guid>
+public sealed class ComponentVersion : TenantOwnedAggregateRoot<Guid>, IHasRowVersion
 {
     public Guid ComponentDefinitionId { get; private set; }
 
@@ -20,6 +20,8 @@ public sealed class ComponentVersion : TenantOwnedAggregateRoot<Guid>
     public SchemaLifecycleStatus Status { get; private set; }
 
     public string? ChangeSummary { get; private set; }
+
+    public uint RowVersion { get; private set; }
 
     public DateTimeOffset? PublishedAt { get; private set; }
 

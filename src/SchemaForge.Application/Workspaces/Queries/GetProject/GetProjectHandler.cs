@@ -15,6 +15,6 @@ public sealed class GetProjectHandler(IProjectRepository projectRepository)
             return Result<ProjectDetail>.Failure(Error.NotFound("Project.NotFound", "No such project."));
         }
 
-        return new ProjectDetail(project.Id, project.Name, project.Description, project.Status);
+        return new ProjectDetail(project.Id, project.Name, project.Description, project.Status, project.RowVersion);
     }
 }

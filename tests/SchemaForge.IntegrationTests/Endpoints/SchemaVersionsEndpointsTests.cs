@@ -51,6 +51,7 @@ public sealed class SchemaVersionsEndpointsTests : IAsyncLifetime
             new AddSchemaNodeRequest(rootId, NodeAttachmentKind.ObjectProperty, "invoiceNumber", NodeKind.String));
         var node = await addNodeResponse.Content.ReadFromJsonAsync<AddSchemaNodeResponse>(TestJson.Options);
 
+        var eTag = await GetETagAsync($"/api/v1/schema-versions/{version.SchemaVersionId}", token);
         var updateResponse = await SendAsync(
             HttpMethod.Patch, $"/api/v1/schema-versions/{version.SchemaVersionId}/nodes/{node!.NodeId}", token,
             new UpdateSchemaNodeRequest(
@@ -59,7 +60,8 @@ public sealed class SchemaVersionsEndpointsTests : IAsyncLifetime
                 ObjectConstraints: null, ArrayConstraints: null,
                 StringConstraints: new StringConstraintsDto(3, 20, "^INV-[0-9]+$", null, null),
                 NumericConstraints: null, DependentRequired: null, Composition: null,
-                ComponentReference: null, LocalDefinitionRef: null));
+                ComponentReference: null, LocalDefinitionRef: null),
+            ifMatch: eTag);
         updateResponse.StatusCode.Should().Be(HttpStatusCode.NoContent);
 
         var publishResponse = await SendAsync(
@@ -88,6 +90,7 @@ public sealed class SchemaVersionsEndpointsTests : IAsyncLifetime
             new AddSchemaNodeRequest(rootId, NodeAttachmentKind.ObjectProperty, "invoiceNumber", NodeKind.String));
         var node = await addNodeResponse.Content.ReadFromJsonAsync<AddSchemaNodeResponse>(TestJson.Options);
 
+        var eTag = await GetETagAsync($"/api/v1/schema-versions/{versionId}", token);
         await SendAsync(HttpMethod.Patch, $"/api/v1/schema-versions/{versionId}/nodes/{node!.NodeId}", token,
             new UpdateSchemaNodeRequest(
                 NodeKind.String, null, null, false, true,
@@ -95,7 +98,8 @@ public sealed class SchemaVersionsEndpointsTests : IAsyncLifetime
                 ObjectConstraints: null, ArrayConstraints: null,
                 StringConstraints: new StringConstraintsDto(null, null, "^INV-[0-9]+$", null, null),
                 NumericConstraints: null, DependentRequired: null, Composition: null,
-                ComponentReference: null, LocalDefinitionRef: null));
+                ComponentReference: null, LocalDefinitionRef: null),
+            ifMatch: eTag);
 
         await SendAsync(HttpMethod.Post, $"/api/v1/schema-versions/{versionId}/publish", token);
 
@@ -132,8 +136,9 @@ public sealed class SchemaVersionsEndpointsTests : IAsyncLifetime
             new MoveSchemaNodeRequest(9));
         moveResponse.StatusCode.Should().Be(HttpStatusCode.NoContent);
 
+        var eTag = await GetETagAsync($"/api/v1/schema-versions/{versionId}", token);
         var removeResponse = await SendAsync(
-            HttpMethod.Delete, $"/api/v1/schema-versions/{versionId}/nodes/{second}", token);
+            HttpMethod.Delete, $"/api/v1/schema-versions/{versionId}/nodes/{second}", token, ifMatch: eTag);
         removeResponse.StatusCode.Should().Be(HttpStatusCode.NoContent);
 
         var detail = await GetVersionAsync(versionId, token);
@@ -220,10 +225,24 @@ public sealed class SchemaVersionsEndpointsTests : IAsyncLifetime
         return login.AccessToken;
     }
 
-    private async Task<HttpResponseMessage> SendAsync(HttpMethod method, string url, string token, object? body = null)
+    // Step 6 §1.5: the resource's current ETag, to be sent back as If-Match on the next
+    // PATCH/DELETE - mutating without first reading a fresh ETag now correctly gets 428.
+    private async Task<string?> GetETagAsync(string url, string token)
+    {
+        var response = await SendAsync(HttpMethod.Get, url, token);
+        return response.Headers.ETag?.Tag;
+    }
+
+    private async Task<HttpResponseMessage> SendAsync(
+        HttpMethod method, string url, string token, object? body = null, string? ifMatch = null)
     {
         var request = new HttpRequestMessage(method, url);
         request.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", token);
+        if (ifMatch is not null)
+        {
+            request.Headers.TryAddWithoutValidation("If-Match", ifMatch);
+        }
+
         if (body is not null)
         {
             request.Content = JsonContent.Create(body, options: TestJson.Options);
