@@ -51,6 +51,11 @@ const router = createRouter({
           component: () => import('@/modules/components-library/views/ComponentVersionDesignerView.vue'),
         },
         {
+          path: 'test-suites/:testSuiteId',
+          name: 'test-suite-detail',
+          component: () => import('@/modules/testing/views/TestSuiteDetailView.vue'),
+        },
+        {
           path: 'teams',
           name: 'teams',
           component: () => import('@/modules/organizations/views/TeamsListView.vue'),

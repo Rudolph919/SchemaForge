@@ -3,9 +3,11 @@ import { computed, onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { schemaDefinitionsApi } from '@/modules/schemas/api/schemaDefinitionsApi'
 import { schemaVersionsApi } from '@/modules/schemas/api/schemaVersionsApi'
+import { testSuitesApi } from '@/modules/testing/api/testSuitesApi'
 import { ApiError } from '@/shared/api/httpClient'
 import Modal from '@/shared/components/Modal.vue'
 import type { SchemaDefinitionDetailResponse, SchemaVersionSummaryResponse, VersionBumpKind } from '@/types/schemas'
+import type { TestSuiteSummaryResponse } from '@/types/testing'
 
 const route = useRoute()
 const router = useRouter()
@@ -29,17 +31,43 @@ const isCreatingVersion = ref(false)
 
 const hasDraft = computed(() => versions.value.some((v) => v.status === 'Draft'))
 
+const testSuites = ref<TestSuiteSummaryResponse[]>([])
+const newSuiteName = ref('')
+const newSuiteDescription = ref('')
+const suiteError = ref<string | null>(null)
+const isCreatingSuite = ref(false)
+
 async function load() {
   loadError.value = null
   try {
-    const [schemaResponse, versionsResponse] = await Promise.all([
+    const [schemaResponse, versionsResponse, testSuitesResponse] = await Promise.all([
       schemaDefinitionsApi.getSchema(schemaId.value),
       schemaVersionsApi.listVersions(schemaId.value),
+      testSuitesApi.listSuites(schemaId.value),
     ])
     schema.value = schemaResponse
     versions.value = versionsResponse
+    testSuites.value = testSuitesResponse
   } catch (error) {
     loadError.value = error instanceof ApiError ? error.message : 'Could not load schema.'
+  }
+}
+
+async function handleCreateSuite() {
+  suiteError.value = null
+  isCreatingSuite.value = true
+  try {
+    await testSuitesApi.createSuite(schemaId.value, {
+      name: newSuiteName.value,
+      description: newSuiteDescription.value || null,
+    })
+    newSuiteName.value = ''
+    newSuiteDescription.value = ''
+    await load()
+  } catch (error) {
+    suiteError.value = error instanceof ApiError ? error.message : 'Could not create test suite.'
+  } finally {
+    isCreatingSuite.value = false
   }
 }
 
@@ -337,6 +365,67 @@ onMounted(load)
                 >
                   Deprecate
                 </button>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="mt-6 rounded-lg border border-slate-200 bg-white p-6">
+        <h2 class="text-base font-semibold text-slate-900">Test Suites</h2>
+
+        <form class="mt-4 flex flex-wrap items-end gap-2 border-b border-slate-100 pb-4" @submit.prevent="handleCreateSuite">
+          <div class="flex-1">
+            <label for="new-suite-name" class="block text-xs font-medium text-slate-500">Name</label>
+            <input
+              id="new-suite-name"
+              v-model="newSuiteName"
+              type="text"
+              required
+              class="mt-1 w-full rounded-md border border-slate-300 px-2 py-1.5 text-sm focus:border-slate-500 focus:outline-none"
+            />
+          </div>
+          <div class="flex-1">
+            <label for="new-suite-description" class="block text-xs font-medium text-slate-500">
+              Description <span class="text-slate-400">(optional)</span>
+            </label>
+            <input
+              id="new-suite-description"
+              v-model="newSuiteDescription"
+              type="text"
+              class="mt-1 w-full rounded-md border border-slate-300 px-2 py-1.5 text-sm focus:border-slate-500 focus:outline-none"
+            />
+          </div>
+          <button
+            type="submit"
+            :disabled="isCreatingSuite"
+            class="rounded-md bg-slate-900 px-3 py-1.5 text-sm font-medium text-white hover:bg-slate-800 disabled:opacity-50"
+          >
+            {{ isCreatingSuite ? 'Creating…' : 'New Suite' }}
+          </button>
+        </form>
+
+        <p v-if="suiteError" class="mt-2 text-sm text-red-600">{{ suiteError }}</p>
+        <p v-if="testSuites.length === 0" class="mt-4 text-sm text-slate-500">No test suites yet.</p>
+
+        <table v-else class="mt-4 w-full text-sm">
+          <thead>
+            <tr class="border-b border-slate-200 text-left text-slate-500">
+              <th class="pb-2 font-medium">Name</th>
+              <th class="pb-2 font-medium">Description</th>
+              <th class="pb-2 font-medium">Cases</th>
+              <th class="pb-2"></th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr v-for="suite in testSuites" :key="suite.id" class="border-b border-slate-100 last:border-0">
+              <td class="py-2 font-medium text-slate-900">{{ suite.name }}</td>
+              <td class="py-2 text-slate-500">{{ suite.description ?? '—' }}</td>
+              <td class="py-2 text-slate-500">{{ suite.caseCount }}</td>
+              <td class="py-2 text-right">
+                <router-link :to="`/test-suites/${suite.id}`" class="text-slate-500 hover:text-slate-900">
+                  Open
+                </router-link>
               </td>
             </tr>
           </tbody>
