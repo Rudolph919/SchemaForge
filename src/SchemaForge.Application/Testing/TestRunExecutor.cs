@@ -14,7 +14,8 @@ public sealed class TestRunExecutor(
     ISchemaVersionRepository schemaVersionRepository,
     ISchemaValidator schemaValidator,
     IUnitOfWork unitOfWork,
-    ITenantContext tenantContext) : ITestRunExecutor
+    ITenantContext tenantContext,
+    ICurrentUserContext currentUserContext) : ITestRunExecutor
 {
     public async Task ExecuteAsync(Guid organizationId, Guid testRunId, CancellationToken cancellationToken)
     {
@@ -30,6 +31,11 @@ public sealed class TestRunExecutor(
         {
             return;
         }
+
+        // Same "no ambient identity in a background job" gap as tenant above - attribute the
+        // TestRunCompleted event's eventual audit entry to whoever triggered the run, not to no
+        // one, once run.Complete() raises it below.
+        currentUserContext.SetUser(run.ExecutedByUserId);
 
         var suite = await testSuiteRepository.GetByIdAsync(run.TestSuiteId, cancellationToken);
         var version = await schemaVersionRepository.GetByIdAsync(run.SchemaVersionId, cancellationToken);

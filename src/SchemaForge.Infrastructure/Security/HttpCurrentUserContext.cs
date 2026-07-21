@@ -29,4 +29,10 @@ public sealed class HttpCurrentUserContext(IHttpContextAccessor httpContextAcces
             return _userId;
         }
     }
+
+    public void SetUser(Guid userId)
+    {
+        _userId = userId;
+        _resolved = true;
+    }
 }

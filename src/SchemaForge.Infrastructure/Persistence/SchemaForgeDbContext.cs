@@ -1,5 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using SchemaForge.Application.Common.Abstractions;
+using SchemaForge.Domain.Audit;
 using SchemaForge.Domain.Components;
 using SchemaForge.Domain.Identity;
 using SchemaForge.Domain.Organizations;
@@ -40,6 +41,8 @@ public sealed class SchemaForgeDbContext(
 
     public DbSet<TestRun> TestRuns => Set<TestRun>();
 
+    public DbSet<AuditLogEntry> AuditLogEntries => Set<AuditLogEntry>();
+
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         modelBuilder.HasPostgresExtension("citext");
@@ -76,5 +79,7 @@ public sealed class SchemaForgeDbContext(
             .HasQueryFilter(s => s.OrganizationId == tenantContext.CurrentTenantId);
         modelBuilder.Entity<TestRun>()
             .HasQueryFilter(r => r.OrganizationId == tenantContext.CurrentTenantId);
+        modelBuilder.Entity<AuditLogEntry>()
+            .HasQueryFilter(e => e.OrganizationId == tenantContext.CurrentTenantId);
     }
 }

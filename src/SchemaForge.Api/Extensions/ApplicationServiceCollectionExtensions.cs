@@ -1,4 +1,5 @@
 using FluentValidation;
+using SchemaForge.Application.Audit;
 using SchemaForge.Application.Common.Behaviors;
 using SchemaForge.Application.Identity.Commands.RegisterUser;
 using SchemaForge.Application.Schemas.Generation;
@@ -34,6 +35,11 @@ public static class ApplicationServiceCollectionExtensions
         // Singleton like the stateless services above), since it depends on repositories tied to
         // a per-job DbContext lifetime.
         services.AddScoped<ITestRunExecutor, TestRunExecutor>();
+
+        // Resolved by DomainEventDispatchInterceptor via the DbContext's own service scope, not
+        // injected into the interceptor's constructor (that's a Singleton) - Scoped because it
+        // depends on scoped ITenantContext/ICurrentUserContext.
+        services.AddScoped<IAuditLogEntryProjector, AuditLogEntryProjector>();
 
         services.AddMediatR(cfg =>
         {

@@ -2,8 +2,14 @@ using SchemaForge.SharedKernel;
 
 namespace SchemaForge.Domain.Components.Events;
 
-public sealed record ComponentVersionPublished(Guid ComponentDefinitionId, Guid ComponentVersionId) : IDomainEvent
+public sealed record ComponentVersionPublished(Guid ComponentDefinitionId, Guid ComponentVersionId)
+    : IAuditableDomainEvent
 {
     public Guid EventId { get; } = Guid.NewGuid();
     public DateTimeOffset OccurredAt { get; } = DateTimeOffset.UtcNow;
+
+    public string Action => "ComponentVersion.Published";
+    public string EntityType => "ComponentVersion";
+    public Guid EntityId => ComponentVersionId;
+    public string? MetadataJson => null;
 }
