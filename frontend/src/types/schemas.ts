@@ -206,3 +206,33 @@ export interface SchemaDiffResponse {
   removedPaths: string[]
   changedPaths: SchemaDiffChangeResponse[]
 }
+
+// Step 9 §2: a suggestion is never persisted server-side, so the client holds the full tree
+// in memory and resends it verbatim to /versions/from-suggestion alongside accepted node ids.
+export interface SuggestedNodeResponse {
+  id: string
+  propertyName: string | null
+  kind: NodeKind
+  description: string | null
+  confidence: number
+  children: SuggestedNodeResponse[]
+}
+
+export interface SchemaSuggestionResponse {
+  providerName: string
+  overallConfidence: number | null
+  nodes: SuggestedNodeResponse[]
+}
+
+export interface CreateDraftFromSuggestionRequest {
+  suggestion: SchemaSuggestionResponse
+  acceptedNodeIds: string[]
+  bumpKind: VersionBumpKind
+  changeSummary: string | null
+}
+
+export interface CreateDraftFromSuggestionResponse {
+  schemaVersionId: string
+  versionNumber: string
+  acceptedCount: number
+}

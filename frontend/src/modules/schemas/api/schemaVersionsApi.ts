@@ -2,6 +2,8 @@ import { httpClient } from '@/shared/api/httpClient'
 import type {
   AddSchemaNodeRequest,
   AddSchemaNodeResponse,
+  CreateDraftFromSuggestionRequest,
+  CreateDraftFromSuggestionResponse,
   CreateSchemaVersionRequest,
   CreateSchemaVersionResponse,
   MoveSchemaNodeRequest,
@@ -67,5 +69,11 @@ export const schemaVersionsApi = {
     httpClient.post<CreateSchemaVersionResponse>(
       `/api/v1/schemas/${schemaDefinitionId}/import?bumpKind=${bumpKind}${changeSummary ? `&changeSummary=${encodeURIComponent(changeSummary)}` : ''}`,
       document,
+    ),
+
+  createDraftFromSuggestion: (schemaDefinitionId: string, request: CreateDraftFromSuggestionRequest) =>
+    httpClient.post<CreateDraftFromSuggestionResponse>(
+      `/api/v1/schemas/${schemaDefinitionId}/versions/from-suggestion`,
+      request,
     ),
 }

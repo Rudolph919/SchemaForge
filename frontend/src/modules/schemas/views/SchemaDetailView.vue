@@ -3,11 +3,14 @@ import { computed, onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { schemaDefinitionsApi } from '@/modules/schemas/api/schemaDefinitionsApi'
 import { schemaVersionsApi } from '@/modules/schemas/api/schemaVersionsApi'
+import SuggestedNodeTree from '@/modules/schemas/components/SuggestedNodeTree.vue'
 import { testSuitesApi } from '@/modules/testing/api/testSuitesApi'
+import { documentsApi } from '@/modules/workspaces/api/documentsApi'
 import { ApiError } from '@/shared/api/httpClient'
 import Modal from '@/shared/components/Modal.vue'
-import type { SchemaDefinitionDetailResponse, SchemaVersionSummaryResponse, VersionBumpKind } from '@/types/schemas'
+import type { SchemaDefinitionDetailResponse, SchemaSuggestionResponse, SchemaVersionSummaryResponse, VersionBumpKind } from '@/types/schemas'
 import type { TestSuiteSummaryResponse } from '@/types/testing'
+import type { SourceDocumentResponse } from '@/types/sourceDocuments'
 
 const route = useRoute()
 const router = useRouter()
@@ -178,6 +181,90 @@ async function handleImport() {
   }
 }
 
+// --- Suggest schema from document (Step 9 §2) ---
+const isSuggestOpen = ref(false)
+const suggestDocuments = ref<SourceDocumentResponse[]>([])
+const suggestDocumentsError = ref<string | null>(null)
+const selectedDocumentId = ref('')
+const suggestion = ref<SchemaSuggestionResponse | null>(null)
+const acceptedNodeIds = ref<Set<string>>(new Set())
+const suggestBumpKind = ref<VersionBumpKind>('Minor')
+const suggestSummary = ref('')
+const suggestError = ref<string | null>(null)
+const isSuggesting = ref(false)
+const isCreatingDraftFromSuggestion = ref(false)
+
+async function openSuggest() {
+  if (!schema.value) return
+  selectedDocumentId.value = ''
+  suggestion.value = null
+  suggestBumpKind.value = 'Minor'
+  suggestSummary.value = ''
+  suggestError.value = null
+  suggestDocumentsError.value = null
+  isSuggestOpen.value = true
+
+  try {
+    suggestDocuments.value = await documentsApi.listDocuments(schema.value.projectId)
+  } catch (error) {
+    suggestDocumentsError.value = error instanceof ApiError ? error.message : 'Could not load documents.'
+  }
+}
+
+function collectNodeIds(nodes: SchemaSuggestionResponse['nodes'], into: Set<string>) {
+  for (const node of nodes) {
+    into.add(node.id)
+    collectNodeIds(node.children, into)
+  }
+}
+
+async function handleGenerateSuggestion() {
+  suggestError.value = null
+  suggestion.value = null
+  isSuggesting.value = true
+  try {
+    const result = await documentsApi.suggestSchema(selectedDocumentId.value)
+    suggestion.value = result
+    const allIds = new Set<string>()
+    collectNodeIds(result.nodes, allIds)
+    acceptedNodeIds.value = allIds
+  } catch (error) {
+    suggestError.value = error instanceof ApiError ? error.message : 'Could not generate a suggestion.'
+  } finally {
+    isSuggesting.value = false
+  }
+}
+
+function toggleAccepted(nodeId: string) {
+  const next = new Set(acceptedNodeIds.value)
+  if (next.has(nodeId)) {
+    next.delete(nodeId)
+  } else {
+    next.add(nodeId)
+  }
+  acceptedNodeIds.value = next
+}
+
+async function handleCreateDraftFromSuggestion() {
+  if (!suggestion.value) return
+  suggestError.value = null
+  isCreatingDraftFromSuggestion.value = true
+  try {
+    await schemaVersionsApi.createDraftFromSuggestion(schemaId.value, {
+      suggestion: suggestion.value,
+      acceptedNodeIds: [...acceptedNodeIds.value],
+      bumpKind: suggestBumpKind.value,
+      changeSummary: suggestSummary.value || null,
+    })
+    isSuggestOpen.value = false
+    await load()
+  } catch (error) {
+    suggestError.value = error instanceof ApiError ? error.message : 'Could not create draft from suggestion.'
+  } finally {
+    isCreatingDraftFromSuggestion.value = false
+  }
+}
+
 function statusClass(status: SchemaVersionSummaryResponse['status']): string {
   switch (status) {
     case 'Draft':
@@ -279,15 +366,26 @@ onMounted(load)
       <div class="mt-6 rounded-lg border border-slate-200 bg-white p-6">
         <div class="flex items-center justify-between">
           <h2 class="text-base font-semibold text-slate-900">Versions</h2>
-          <button
-            type="button"
-            :disabled="hasDraft"
-            :title="hasDraft ? 'A draft version already exists' : undefined"
-            class="rounded-md border border-slate-300 px-3 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-50"
-            @click="openImport"
-          >
-            Import JSON Schema
-          </button>
+          <div class="flex gap-2">
+            <button
+              type="button"
+              :disabled="hasDraft"
+              :title="hasDraft ? 'A draft version already exists' : undefined"
+              class="rounded-md border border-slate-300 px-3 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-50"
+              @click="openSuggest"
+            >
+              Suggest Schema from Document
+            </button>
+            <button
+              type="button"
+              :disabled="hasDraft"
+              :title="hasDraft ? 'A draft version already exists' : undefined"
+              class="rounded-md border border-slate-300 px-3 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-50"
+              @click="openImport"
+            >
+              Import JSON Schema
+            </button>
+          </div>
         </div>
 
         <form class="mt-4 flex flex-wrap items-end gap-2 border-b border-slate-100 pb-4" @submit.prevent="handleCreateVersion">
@@ -480,6 +578,97 @@ onMounted(load)
           {{ isImporting ? 'Importing…' : 'Import' }}
         </button>
       </form>
+    </Modal>
+
+    <Modal v-if="isSuggestOpen" title="Suggest Schema from Document" @close="isSuggestOpen = false">
+      <div class="space-y-4">
+        <p v-if="suggestDocumentsError" class="text-sm text-red-600">{{ suggestDocumentsError }}</p>
+        <p v-else-if="suggestDocuments.length === 0" class="text-sm text-slate-500">
+          No documents uploaded to this project yet.
+        </p>
+
+        <form v-else class="flex flex-wrap items-end gap-2" @submit.prevent="handleGenerateSuggestion">
+          <div class="flex-1">
+            <label for="suggest-document" class="block text-xs font-medium text-slate-500">Source document</label>
+            <select
+              id="suggest-document"
+              v-model="selectedDocumentId"
+              required
+              class="mt-1 w-full rounded-md border border-slate-300 px-2 py-1.5 text-sm focus:border-slate-500 focus:outline-none"
+            >
+              <option value="" disabled>Select a document…</option>
+              <option v-for="doc in suggestDocuments" :key="doc.id" :value="doc.id">{{ doc.fileName }}</option>
+            </select>
+          </div>
+          <button
+            type="submit"
+            :disabled="isSuggesting || !selectedDocumentId"
+            class="rounded-md bg-slate-900 px-3 py-1.5 text-sm font-medium text-white hover:bg-slate-800 disabled:opacity-50"
+          >
+            {{ isSuggesting ? 'Generating…' : 'Generate Suggestion' }}
+          </button>
+        </form>
+
+        <p v-if="suggestError" class="text-sm text-red-600">{{ suggestError }}</p>
+
+        <template v-if="suggestion">
+          <div class="rounded-md border border-slate-200">
+            <div class="border-b border-slate-100 bg-slate-50 px-3 py-1.5 text-xs text-slate-500">
+              Suggested by {{ suggestion.providerName }}
+              <span v-if="suggestion.overallConfidence != null">
+                · {{ Math.round(suggestion.overallConfidence * 100) }}% overall confidence
+              </span>
+            </div>
+            <div class="max-h-72 overflow-y-auto py-1">
+              <p v-if="suggestion.nodes.length === 0" class="px-3 py-2 text-sm text-slate-500">No nodes suggested.</p>
+              <SuggestedNodeTree
+                v-for="node in suggestion.nodes"
+                :key="node.id"
+                :node="node"
+                :accepted-ids="acceptedNodeIds"
+                :depth="0"
+                :parent-accepted="true"
+                @toggle="toggleAccepted"
+              />
+            </div>
+          </div>
+
+          <div class="grid grid-cols-2 gap-3">
+            <div>
+              <label for="suggest-bump-kind" class="block text-xs font-medium text-slate-500">Bump</label>
+              <select
+                id="suggest-bump-kind"
+                v-model="suggestBumpKind"
+                class="mt-1 w-full rounded-md border border-slate-300 px-2 py-1.5 text-sm focus:border-slate-500 focus:outline-none"
+              >
+                <option value="Major">Major</option>
+                <option value="Minor">Minor</option>
+                <option value="Patch">Patch</option>
+              </select>
+            </div>
+            <div>
+              <label for="suggest-summary" class="block text-xs font-medium text-slate-500">
+                Change summary <span class="text-slate-400">(optional)</span>
+              </label>
+              <input
+                id="suggest-summary"
+                v-model="suggestSummary"
+                type="text"
+                class="mt-1 w-full rounded-md border border-slate-300 px-2 py-1.5 text-sm focus:border-slate-500 focus:outline-none"
+              />
+            </div>
+          </div>
+
+          <button
+            type="button"
+            :disabled="isCreatingDraftFromSuggestion || acceptedNodeIds.size === 0"
+            class="w-full rounded-md bg-slate-900 px-3 py-2 text-sm font-medium text-white hover:bg-slate-800 disabled:opacity-50"
+            @click="handleCreateDraftFromSuggestion"
+          >
+            {{ isCreatingDraftFromSuggestion ? 'Creating…' : `Create Draft (${acceptedNodeIds.size} accepted)` }}
+          </button>
+        </template>
+      </div>
     </Modal>
   </div>
 </template>
