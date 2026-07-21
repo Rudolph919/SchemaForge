@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using SchemaForge.Api.Common;
 using SchemaForge.Api.Mapping;
+using SchemaForge.Api.Middleware;
 using SchemaForge.Application.Workspaces.Commands.ArchiveProject;
 using SchemaForge.Application.Workspaces.Commands.ReactivateProject;
 using SchemaForge.Application.Workspaces.Queries.GetProject;
@@ -31,6 +32,7 @@ public sealed class ProjectsController(ISender sender) : ControllerBase
     }
 
     [HttpPost]
+    [Idempotent]
     public async Task<IActionResult> Create(CreateProjectRequest request, CancellationToken cancellationToken)
     {
         var result = await sender.Send(request.ToCommand(), cancellationToken);

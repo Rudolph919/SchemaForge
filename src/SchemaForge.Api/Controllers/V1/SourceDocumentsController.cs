@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using SchemaForge.Api.Common;
 using SchemaForge.Api.Mapping;
+using SchemaForge.Api.Middleware;
 using SchemaForge.Application.Workspaces.Commands.DeleteSourceDocument;
 using SchemaForge.Application.Workspaces.Commands.UploadSourceDocument;
 using SchemaForge.Application.Workspaces.Queries.ListSourceDocuments;
@@ -22,6 +23,7 @@ public sealed class SourceDocumentsController(ISender sender) : ControllerBase
     }
 
     [HttpPost]
+    [Idempotent]
     [RequestSizeLimit(100 * 1024 * 1024)]
     public async Task<IActionResult> Upload(Guid projectId, IFormFile file, CancellationToken cancellationToken)
     {

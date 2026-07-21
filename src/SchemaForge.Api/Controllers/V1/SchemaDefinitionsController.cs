@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using SchemaForge.Api.Common;
 using SchemaForge.Api.Mapping;
+using SchemaForge.Api.Middleware;
 using SchemaForge.Application.Schemas.Commands.CreateSchemaDefinition;
 using SchemaForge.Application.Schemas.Commands.UpdateSchemaDefinitionDetails;
 using SchemaForge.Application.Schemas.Queries.GetSchemaDefinition;
@@ -23,6 +24,7 @@ public sealed class SchemaDefinitionsController(ISender sender) : ControllerBase
     }
 
     [HttpPost("api/v1/projects/{projectId:guid}/schemas")]
+    [Idempotent]
     public async Task<IActionResult> Create(
         Guid projectId, CreateSchemaDefinitionRequest request, CancellationToken cancellationToken)
     {

@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using SchemaForge.Api.Common;
 using SchemaForge.Api.Mapping;
+using SchemaForge.Api.Middleware;
 using SchemaForge.Application.Components.Commands.CreateComponentDefinition;
 using SchemaForge.Application.Components.Commands.UpdateComponentDefinitionDetails;
 using SchemaForge.Application.Components.Queries.GetComponentDefinition;
@@ -30,6 +31,7 @@ public sealed class ComponentsController(ISender sender) : ControllerBase
     }
 
     [HttpPost]
+    [Idempotent]
     public async Task<IActionResult> Create(CreateComponentDefinitionRequest request, CancellationToken cancellationToken)
     {
         var result = await sender.Send(request.ToCommand(), cancellationToken);

@@ -1,7 +1,9 @@
 using MediatR;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.RateLimiting;
 using SchemaForge.Api.Common;
+using SchemaForge.Api.Extensions;
 using SchemaForge.Api.Mapping;
 using SchemaForge.Contracts.V1.Auth;
 
@@ -11,7 +13,11 @@ namespace SchemaForge.Api.Controllers.V1;
 [Route("api/v1/auth")]
 public sealed class AuthController(ISender sender) : ControllerBase
 {
+    // Stricter than the global default (Step 10 Phase 7) - these are the two endpoints a
+    // credential-stuffing or account-enumeration attempt would actually hammer, unlike the rest
+    // of the API which only an authenticated caller can reach at all.
     [HttpPost("register")]
+    [EnableRateLimiting(ApiServiceCollectionExtensions.AuthRateLimitPolicy)]
     public async Task<IActionResult> Register(RegisterRequest request, CancellationToken cancellationToken)
     {
         var result = await sender.Send(request.ToCommand(), cancellationToken);
@@ -19,6 +25,7 @@ public sealed class AuthController(ISender sender) : ControllerBase
     }
 
     [HttpPost("login")]
+    [EnableRateLimiting(ApiServiceCollectionExtensions.AuthRateLimitPolicy)]
     public async Task<IActionResult> Login(LoginRequest request, CancellationToken cancellationToken)
     {
         var result = await sender.Send(request.ToQuery(), cancellationToken);

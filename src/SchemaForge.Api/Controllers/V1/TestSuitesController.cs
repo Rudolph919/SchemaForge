@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using SchemaForge.Api.Common;
 using SchemaForge.Api.Mapping;
+using SchemaForge.Api.Middleware;
 using SchemaForge.Application.Testing.Commands.AddTestCase;
 using SchemaForge.Application.Testing.Commands.RemoveTestCase;
 using SchemaForge.Application.Testing.Commands.RunTestSuite;
@@ -25,6 +26,7 @@ public sealed class TestSuitesController(ISender sender) : ControllerBase
     }
 
     [HttpPost("api/v1/schemas/{schemaDefinitionId:guid}/test-suites")]
+    [Idempotent]
     public async Task<IActionResult> Create(
         Guid schemaDefinitionId, CreateTestSuiteRequest request, CancellationToken cancellationToken)
     {
@@ -74,6 +76,7 @@ public sealed class TestSuitesController(ISender sender) : ControllerBase
     // returns, only started (Step 6 §2.7/§4's "always async, never inline" contract). The client
     // polls GET /test-runs/{id} for the outcome.
     [HttpPost("api/v1/test-suites/{testSuiteId:guid}/run")]
+    [Idempotent]
     public async Task<IActionResult> Run(
         Guid testSuiteId, [FromQuery] Guid targetVersionId, CancellationToken cancellationToken)
     {
