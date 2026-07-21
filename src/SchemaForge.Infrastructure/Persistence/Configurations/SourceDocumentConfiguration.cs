@@ -38,6 +38,14 @@ public sealed class SourceDocumentConfiguration : IEntityTypeConfiguration<Sourc
         builder.HasOne<User>().WithMany().HasForeignKey(d => d.UpdatedByUserId)
             .OnDelete(DeleteBehavior.Restrict);
 
+        // Step 7's index audit: SourceDocumentRepository.GetAllForProjectAsync filters on
+        // ProjectId alone. EF's own FK convention already creates an equivalent index
+        // automatically (confirmed: `dotnet ef migrations add` generated no new CreateIndex for
+        // this column), but declaring it explicitly documents that this index is load-bearing
+        // for a real query, not just an FK-convention side effect that's safe to lose if the
+        // relationship mapping ever changes shape.
+        builder.HasIndex(d => d.ProjectId);
+
         builder.Ignore(d => d.DomainEvents);
     }
 }

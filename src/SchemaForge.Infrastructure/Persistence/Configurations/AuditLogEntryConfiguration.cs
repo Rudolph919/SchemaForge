@@ -34,6 +34,10 @@ public sealed class AuditLogEntryConfiguration : IEntityTypeConfiguration<AuditL
         builder.HasIndex(e => new { e.OrganizationId, e.OccurredAt });
         builder.HasIndex(e => new { e.OrganizationId, e.EntityType, e.EntityId, e.OccurredAt });
 
+        // Step 7's index audit: GetAuditLogQuery's actorUserId filter (a third real access
+        // pattern - "what has this person done") had no supporting index until now.
+        builder.HasIndex(e => new { e.OrganizationId, e.ActorUserId, e.OccurredAt });
+
         // Every TenantOwnedAggregateRoot carries these (the hierarchy bundles AuditableEntity
         // in, Step 4 can't express it as multiple inheritance in C#) - mapped the same way as
         // TestRun/ValidationRun even though OccurredAt is the timestamp that actually matters

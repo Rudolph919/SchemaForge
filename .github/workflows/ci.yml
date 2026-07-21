@@ -17,6 +17,10 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          # Full history, not the default shallow clone - gitleaks below scans commit history,
+          # not just the working tree, so a secret committed and later removed still gets caught.
+          fetch-depth: 0
 
       - name: Setup .NET
         uses: actions/setup-dotnet@v4
@@ -41,3 +45,20 @@ jobs:
           name: Test Results
           path: "**/test-results.trx"
           reporter: dotnet-trx
+
+      # Step 10 Phase 7's security review pass: dependency audit (known-CVE NuGet packages) and
+      # secret scanning in CI, per the brief's Security NFR.
+      - name: Dependency vulnerability scan
+        run: |
+          dotnet list package --vulnerable --include-transitive 2>&1 | tee vulnerable-packages.txt
+          if grep -q "has the following vulnerable packages" vulnerable-packages.txt; then
+            echo "::error::Vulnerable NuGet packages found - see the log above for which package(s) and severity."
+            exit 1
+          fi
+
+      - name: Secret scanning
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          # No license needed here: gitleaks-action only requires GITLEAKS_LICENSE for
+          # organization-owned private repos, not personal-account ones (this repo's case).
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
