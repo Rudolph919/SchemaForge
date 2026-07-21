@@ -16,7 +16,11 @@ public static class ValidationMappingExtensions
         summary.Id, summary.Outcome.ToContract(), [.. summary.Errors.Select(e => e.ToResponse())],
         summary.ExecutedAt, summary.ExecutedByUserId);
 
-    private static ValidationErrorResponse ToResponse(this ValidationError error) =>
+    // internal, not private: reused by TestingMappingExtensions for TestCaseResult.ActualErrors,
+    // the same ValidationError type validation and test execution both produce (same reasoning
+    // as SchemaVersionsMappingExtensions' node-mapping helpers being made internal for Components
+    // to reuse in Phase 3).
+    internal static ValidationErrorResponse ToResponse(this ValidationError error) =>
         new(error.Path.Value, error.Code, error.Message, error.Severity.ToContract());
 
     private static ValidationOutcome ToContract(this DomainValidationOutcome outcome) => outcome switch

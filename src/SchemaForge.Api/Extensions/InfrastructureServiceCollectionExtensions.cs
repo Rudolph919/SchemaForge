@@ -1,4 +1,7 @@
+using Hangfire;
+using Hangfire.PostgreSql;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Hosting;
 using SchemaForge.Application.Common.Abstractions;
 using SchemaForge.Application.Components;
 using SchemaForge.Application.Identity;
@@ -7,6 +10,7 @@ using SchemaForge.Application.Schemas;
 using SchemaForge.Application.Testing;
 using SchemaForge.Application.Validation;
 using SchemaForge.Application.Workspaces;
+using SchemaForge.Infrastructure.BackgroundJobs;
 using SchemaForge.Infrastructure.Caching;
 using SchemaForge.Infrastructure.Persistence;
 using SchemaForge.Infrastructure.Persistence.Interceptors;
@@ -19,7 +23,7 @@ namespace SchemaForge.Api.Extensions;
 public static class InfrastructureServiceCollectionExtensions
 {
     public static IServiceCollection AddInfrastructure(
-        this IServiceCollection services, IConfiguration configuration)
+        this IServiceCollection services, IConfiguration configuration, IHostEnvironment environment)
     {
         services.AddHttpContextAccessor();
         services.AddScoped<ITenantContext, HttpTenantContext>();
@@ -49,7 +53,30 @@ public static class InfrastructureServiceCollectionExtensions
         services.AddScoped<IComponentDefinitionRepository, ComponentDefinitionRepository>();
         services.AddScoped<IComponentVersionRepository, ComponentVersionRepository>();
         services.AddScoped<ITestSuiteRepository, TestSuiteRepository>();
+        services.AddScoped<ITestRunRepository, TestRunRepository>();
         services.AddScoped<IUnitOfWork, UnitOfWork>();
+
+        // First real consumer of the Step 1 §8 background job infrastructure (Schema Testing's
+        // async test runs) - deliberately not wired any earlier, since nothing before this
+        // needed asynchronous execution. Own Postgres schema ("hangfire", not "public"), migrated
+        // automatically by the package itself - no hand-designed background-job table.
+        services.AddHangfire(config => config
+            .SetDataCompatibilityLevel(CompatibilityLevel.Version_180)
+            .UseSimpleAssemblyNameTypeSerializer()
+            .UseRecommendedSerializerSettings()
+            .UsePostgreSqlStorage(o => o.UseNpgsqlConnection(configuration.GetConnectionString("Default")),
+                new PostgreSqlStorageOptions { SchemaName = "hangfire" }));
+        services.AddScoped<IJobDispatcher, HangfireJobDispatcher>();
+
+        // The actual worker (not the client above, which integration tests still need so
+        // IJobDispatcher resolves) is skipped under the "Testing" WebApplicationFactory
+        // environment - a real BackgroundJobServer takes ~60s to shut down gracefully per host,
+        // and the integration suite spins up a fresh host per test class (confirmed live: the
+        // full suite went from ~7s to a 25+ minute hang the moment this was unconditional).
+        if (!environment.IsEnvironment("Testing"))
+        {
+            services.AddHangfireServer();
+        }
 
         services.AddScoped<IPasswordHasher, IdentityPasswordHasher>();
         services.AddScoped<IJwtTokenService, JwtTokenService>();

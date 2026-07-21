@@ -4,12 +4,15 @@ using SchemaForge.Application.Testing.Commands.AddTestCase;
 using SchemaForge.Application.Testing.Commands.CreateTestSuite;
 using SchemaForge.Application.Testing.Commands.UpdateTestCase;
 using SchemaForge.Application.Testing.Commands.UpdateTestSuiteDetails;
+using SchemaForge.Application.Testing.Commands.RunTestSuite;
+using SchemaForge.Application.Testing.Queries.GetTestRun;
 using SchemaForge.Application.Testing.Queries.GetTestSuite;
 using SchemaForge.Contracts.V1.Testing;
 using SchemaForge.SharedKernel.Primitives;
 using DomainExpectation = SchemaForge.Domain.Testing.TestExpectation;
 using DomainExpectationKind = SchemaForge.Domain.Testing.TestExpectationKind;
 using DomainExpectedError = SchemaForge.Domain.Testing.ExpectedError;
+using DomainTestRunStatus = SchemaForge.Domain.Testing.TestRunStatus;
 
 namespace SchemaForge.Api.Mapping;
 
@@ -49,6 +52,20 @@ public static class TestingMappingExtensions
             _ => throw new ArgumentOutOfRangeException(nameof(dto), dto.Kind, "Unknown test expectation kind."),
         },
         dto.ExpectedErrors?.Select(e => new DomainExpectedError(JsonPath.Create(e.Path), e.ErrorCodePattern)).ToList());
+
+    public static RunTestSuiteResponse ToResponse(this RunTestSuiteResult result) => new(result.TestRunId);
+
+    public static TestRunResponse ToResponse(this TestRunDetail detail) => new(
+        detail.Id, detail.TestSuiteId, detail.SchemaVersionId, detail.Status.ToContract(), detail.ExecutedAt,
+        detail.Results.Select(r => new TestCaseResultResponse(
+            r.TestCaseId, r.TestCaseName, r.Passed, r.ActualErrors.Select(e => e.ToResponse()).ToList())).ToList());
+
+    private static TestRunStatus ToContract(this DomainTestRunStatus status) => status switch
+    {
+        DomainTestRunStatus.Pending => TestRunStatus.Pending,
+        DomainTestRunStatus.Completed => TestRunStatus.Completed,
+        _ => throw new ArgumentOutOfRangeException(nameof(status), status, "Unknown test run status."),
+    };
 
     private static TestExpectationDto ToDto(this DomainExpectation expectation) => new(
         expectation.Kind switch

@@ -3,6 +3,7 @@ using SchemaForge.Application.Common.Behaviors;
 using SchemaForge.Application.Identity.Commands.RegisterUser;
 using SchemaForge.Application.Schemas.Generation;
 using SchemaForge.Application.Schemas.Validation;
+using SchemaForge.Application.Testing;
 
 namespace SchemaForge.Api.Extensions;
 
@@ -28,6 +29,11 @@ public static class ApplicationServiceCollectionExtensions
         services.AddSingleton<IDocumentationRenderer, JsonDocumentationRenderer>();
         services.AddSingleton<IDocumentationRenderer, MarkdownDocumentationRenderer>();
         services.AddSingleton<IDocumentationRenderer, HtmlDocumentationRenderer>();
+
+        // Resolved directly by Hangfire's activator, not through MediatR - Scoped (not
+        // Singleton like the stateless services above), since it depends on repositories tied to
+        // a per-job DbContext lifetime.
+        services.AddScoped<ITestRunExecutor, TestRunExecutor>();
 
         services.AddMediatR(cfg =>
         {

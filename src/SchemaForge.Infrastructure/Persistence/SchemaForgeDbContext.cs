@@ -38,6 +38,8 @@ public sealed class SchemaForgeDbContext(
 
     public DbSet<TestSuite> TestSuites => Set<TestSuite>();
 
+    public DbSet<TestRun> TestRuns => Set<TestRun>();
+
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         modelBuilder.HasPostgresExtension("citext");
@@ -72,5 +74,7 @@ public sealed class SchemaForgeDbContext(
             .HasQueryFilter(v => v.OrganizationId == tenantContext.CurrentTenantId);
         modelBuilder.Entity<TestSuite>()
             .HasQueryFilter(s => s.OrganizationId == tenantContext.CurrentTenantId);
+        modelBuilder.Entity<TestRun>()
+            .HasQueryFilter(r => r.OrganizationId == tenantContext.CurrentTenantId);
     }
 }

@@ -5,6 +5,7 @@ using SchemaForge.Api.Common;
 using SchemaForge.Api.Mapping;
 using SchemaForge.Application.Testing.Commands.AddTestCase;
 using SchemaForge.Application.Testing.Commands.RemoveTestCase;
+using SchemaForge.Application.Testing.Commands.RunTestSuite;
 using SchemaForge.Application.Testing.Commands.UpdateTestCase;
 using SchemaForge.Application.Testing.Queries.GetTestSuite;
 using SchemaForge.Application.Testing.Queries.ListTestSuites;
@@ -67,5 +68,18 @@ public sealed class TestSuitesController(ISender sender) : ControllerBase
     {
         var result = await sender.Send(new RemoveTestCaseCommand(testSuiteId, caseId), cancellationToken);
         return result.ToActionResult();
+    }
+
+    // 202 Accepted + Location, not 200/201 - the suite hasn't finished running by the time this
+    // returns, only started (Step 6 §2.7/§4's "always async, never inline" contract). The client
+    // polls GET /test-runs/{id} for the outcome.
+    [HttpPost("api/v1/test-suites/{testSuiteId:guid}/run")]
+    public async Task<IActionResult> Run(
+        Guid testSuiteId, [FromQuery] Guid targetVersionId, CancellationToken cancellationToken)
+    {
+        var result = await sender.Send(new RunTestSuiteCommand(testSuiteId, targetVersionId), cancellationToken);
+        return result.IsSuccess
+            ? Accepted($"/api/v1/test-runs/{result.Value.TestRunId}", result.Value.ToResponse())
+            : result.ToActionResult(r => r.ToResponse());
     }
 }
