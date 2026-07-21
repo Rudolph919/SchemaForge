@@ -63,6 +63,8 @@ onMounted(loadMemberships)
   <div class="relative">
     <button
       type="button"
+      aria-haspopup="true"
+      :aria-expanded="isOpen"
       class="flex items-center gap-2 rounded-md border border-slate-300 bg-white px-3 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-50"
       @click="isOpen = !isOpen"
     >
@@ -70,7 +72,7 @@ onMounted(loadMemberships)
       <span v-if="invitedMemberships.length > 0" class="rounded-full bg-amber-100 px-1.5 py-0.5 text-xs text-amber-800">
         {{ invitedMemberships.length }}
       </span>
-      <svg class="size-4 text-slate-400" viewBox="0 0 20 20" fill="currentColor">
+      <svg class="size-4 text-slate-400" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
         <path
           fill-rule="evenodd"
           d="M5.23 7.21a.75.75 0 011.06.02L10 11.168l3.71-3.938a.75.75 0 111.08 1.04l-4.25 4.5a.75.75 0 01-1.08 0l-4.25-4.5a.75.75 0 01.02-1.06z"
