@@ -44,4 +44,7 @@ public sealed class SchemaVersionRepository(SchemaForgeDbContext dbContext) : IS
 
     public async Task AddAsync(SchemaVersion version, CancellationToken cancellationToken) =>
         await dbContext.SchemaVersions.AddAsync(version, cancellationToken);
+
+    public void ApplyExpectedVersion(SchemaVersion version, uint expectedVersion) =>
+        dbContext.ApplyExpectedVersion(version, expectedVersion);
 }

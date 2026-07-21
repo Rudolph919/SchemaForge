@@ -2,13 +2,15 @@ using SchemaForge.SharedKernel;
 
 namespace SchemaForge.Domain.Workspaces;
 
-public sealed class Project : TenantOwnedAggregateRoot<Guid>
+public sealed class Project : TenantOwnedAggregateRoot<Guid>, IHasRowVersion
 {
     public string Name { get; private set; } = null!;
 
     public string? Description { get; private set; }
 
     public ProjectStatus Status { get; private set; }
+
+    public uint RowVersion { get; private set; }
 
     private Project() { } // EF Core materialization
 

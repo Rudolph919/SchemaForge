@@ -14,6 +14,12 @@ public sealed class UpdateComponentNodeHandler(IComponentVersionRepository compo
             return Result.Failure(Error.NotFound("ComponentVersion.NotFound", "No such component version."));
         }
 
-        return version.UpdateNode(request.NodeId, request.Content);
+        var result = version.UpdateNode(request.NodeId, request.Content);
+        if (result.IsSuccess)
+        {
+            componentVersionRepository.ApplyExpectedVersion(version, request.ExpectedVersion);
+        }
+
+        return result;
     }
 }

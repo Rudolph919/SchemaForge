@@ -18,4 +18,7 @@ public sealed class SchemaDefinitionRepository(SchemaForgeDbContext dbContext) :
 
     public async Task AddAsync(SchemaDefinition definition, CancellationToken cancellationToken) =>
         await dbContext.SchemaDefinitions.AddAsync(definition, cancellationToken);
+
+    public void ApplyExpectedVersion(SchemaDefinition definition, uint expectedVersion) =>
+        dbContext.ApplyExpectedVersion(definition, expectedVersion);
 }

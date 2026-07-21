@@ -88,6 +88,11 @@ public sealed class ComponentVersionConfiguration : IEntityTypeConfiguration<Com
 
         builder.HasIndex(v => v.ComponentDefinitionId);
 
+        // Backed by Postgres's built-in xmin system column (Step 6 §1.5's optimistic
+        // concurrency) - a real mapped property, not a shadow one, so Application-layer
+        // query handlers can read v.RowVersion directly without an EF Core reference.
+        builder.Property(v => v.RowVersion).HasColumnName("xmin").IsRowVersion();
+
         builder.Ignore(v => v.DomainEvents);
     }
 }

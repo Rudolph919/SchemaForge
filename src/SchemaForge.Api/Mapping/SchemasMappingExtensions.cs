@@ -15,8 +15,8 @@ public static class SchemasMappingExtensions
         new(result.SchemaDefinitionId);
 
     public static UpdateSchemaDefinitionDetailsCommand ToCommand(
-        this UpdateSchemaDefinitionDetailsRequest request, Guid schemaDefinitionId) =>
-        new(schemaDefinitionId, request.Name, request.Description, request.Tags);
+        this UpdateSchemaDefinitionDetailsRequest request, Guid schemaDefinitionId, uint expectedVersion) =>
+        new(schemaDefinitionId, request.Name, request.Description, request.Tags, expectedVersion);
 
     public static SchemaDefinitionSummaryResponse ToResponse(this SchemaDefinitionSummary summary) =>
         new(summary.Id, summary.Name, summary.Description, summary.Tags);

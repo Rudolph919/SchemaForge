@@ -35,8 +35,9 @@ public sealed class ProjectsEndpointsTests : IAsyncLifetime
             new CreateProjectRequest("Billing Schemas", "Invoices and payments"));
         var project = await createResponse.Content.ReadFromJsonAsync<CreateProjectResponse>();
 
-        var updateResponse = await SendAsync(HttpMethod.Put, $"/api/v1/projects/{project!.ProjectId}", token,
-            new UpdateProjectDetailsRequest("Billing Schemas v2", "Updated"));
+        var eTag = await GetETagAsync(project!.ProjectId, token);
+        var updateResponse = await SendAsync(HttpMethod.Put, $"/api/v1/projects/{project.ProjectId}", token,
+            new UpdateProjectDetailsRequest("Billing Schemas v2", "Updated"), ifMatch: eTag);
         updateResponse.StatusCode.Should().Be(HttpStatusCode.NoContent);
 
         var archiveResponse = await SendAsync(HttpMethod.Post, $"/api/v1/projects/{project.ProjectId}/archive", token);
@@ -90,6 +91,12 @@ public sealed class ProjectsEndpointsTests : IAsyncLifetime
         return (await response.Content.ReadFromJsonAsync<ProjectDetailResponse>(TestJson.Options))!;
     }
 
+    private async Task<string?> GetETagAsync(Guid projectId, string token)
+    {
+        var response = await SendAsync(HttpMethod.Get, $"/api/v1/projects/{projectId}", token);
+        return response.Headers.ETag?.Tag;
+    }
+
     private async Task<string> RegisterAndLoginAsync(string organizationName)
     {
         var email = $"{Guid.NewGuid()}@example.com";
@@ -104,10 +111,16 @@ public sealed class ProjectsEndpointsTests : IAsyncLifetime
         return login.AccessToken;
     }
 
-    private async Task<HttpResponseMessage> SendAsync(HttpMethod method, string url, string token, object? body = null)
+    private async Task<HttpResponseMessage> SendAsync(
+        HttpMethod method, string url, string token, object? body = null, string? ifMatch = null)
     {
         var request = new HttpRequestMessage(method, url);
         request.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", token);
+        if (ifMatch is not null)
+        {
+            request.Headers.TryAddWithoutValidation("If-Match", ifMatch);
+        }
+
         if (body is not null)
         {
             request.Content = JsonContent.Create(body);

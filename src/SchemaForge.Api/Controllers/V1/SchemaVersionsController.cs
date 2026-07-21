@@ -62,6 +62,11 @@ public sealed class SchemaVersionsController(ISender sender) : ControllerBase
     public async Task<IActionResult> Get(Guid schemaVersionId, CancellationToken cancellationToken)
     {
         var result = await sender.Send(new GetSchemaVersionQuery(schemaVersionId), cancellationToken);
+        if (result.IsSuccess)
+        {
+            Response.SetETag(result.Value.RowVersion);
+        }
+
         return result.ToActionResult(d => d.ToResponse());
     }
 
@@ -77,15 +82,25 @@ public sealed class SchemaVersionsController(ISender sender) : ControllerBase
     public async Task<IActionResult> UpdateNode(
         Guid schemaVersionId, Guid nodeId, UpdateSchemaNodeRequest request, CancellationToken cancellationToken)
     {
+        if (!Request.TryGetIfMatch(out var expectedVersion))
+        {
+            return ConcurrencyExtensions.PreconditionRequired();
+        }
+
         var result = await sender.Send(
-            new UpdateSchemaNodeCommand(schemaVersionId, nodeId, request.ToDomain()), cancellationToken);
+            new UpdateSchemaNodeCommand(schemaVersionId, nodeId, request.ToDomain(), expectedVersion), cancellationToken);
         return result.ToActionResult();
     }
 
     [HttpDelete("api/v1/schema-versions/{schemaVersionId:guid}/nodes/{nodeId:guid}")]
     public async Task<IActionResult> RemoveNode(Guid schemaVersionId, Guid nodeId, CancellationToken cancellationToken)
     {
-        var result = await sender.Send(new RemoveSchemaNodeCommand(schemaVersionId, nodeId), cancellationToken);
+        if (!Request.TryGetIfMatch(out var expectedVersion))
+        {
+            return ConcurrencyExtensions.PreconditionRequired();
+        }
+
+        var result = await sender.Send(new RemoveSchemaNodeCommand(schemaVersionId, nodeId, expectedVersion), cancellationToken);
         return result.ToActionResult();
     }
 

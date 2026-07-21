@@ -4,4 +4,5 @@ using SchemaForge.SharedKernel;
 namespace SchemaForge.Application.Schemas.Commands.UpdateSchemaDefinitionDetails;
 
 public sealed record UpdateSchemaDefinitionDetailsCommand(
-    Guid SchemaDefinitionId, string Name, string? Description, IReadOnlyList<string> Tags) : ICommand<Result>;
+    Guid SchemaDefinitionId, string Name, string? Description, IReadOnlyList<string> Tags, uint ExpectedVersion)
+    : ICommand<Result>;

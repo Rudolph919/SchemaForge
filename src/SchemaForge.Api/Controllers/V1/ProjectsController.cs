@@ -28,6 +28,11 @@ public sealed class ProjectsController(ISender sender) : ControllerBase
     public async Task<IActionResult> Get(Guid projectId, CancellationToken cancellationToken)
     {
         var result = await sender.Send(new GetProjectQuery(projectId), cancellationToken);
+        if (result.IsSuccess)
+        {
+            Response.SetETag(result.Value.RowVersion);
+        }
+
         return result.ToActionResult(p => p.ToResponse());
     }
 
@@ -43,7 +48,12 @@ public sealed class ProjectsController(ISender sender) : ControllerBase
     public async Task<IActionResult> UpdateDetails(
         Guid projectId, UpdateProjectDetailsRequest request, CancellationToken cancellationToken)
     {
-        var result = await sender.Send(request.ToCommand(projectId), cancellationToken);
+        if (!Request.TryGetIfMatch(out var expectedVersion))
+        {
+            return ConcurrencyExtensions.PreconditionRequired();
+        }
+
+        var result = await sender.Send(request.ToCommand(projectId, expectedVersion), cancellationToken);
         return result.ToActionResult();
     }
 

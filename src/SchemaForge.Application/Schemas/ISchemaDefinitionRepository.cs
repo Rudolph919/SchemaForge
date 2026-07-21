@@ -11,4 +11,6 @@ public interface ISchemaDefinitionRepository
     Task<bool> ExistsByNameAsync(Guid projectId, string name, CancellationToken cancellationToken);
 
     Task AddAsync(SchemaDefinition definition, CancellationToken cancellationToken);
+
+    void ApplyExpectedVersion(SchemaDefinition definition, uint expectedVersion);
 }

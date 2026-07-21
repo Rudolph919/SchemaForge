@@ -1,5 +1,6 @@
 using MediatR;
 using SchemaForge.Application.Common.Abstractions;
+using SchemaForge.Application.Common.Exceptions;
 using SchemaForge.Application.Common.Messaging;
 using SchemaForge.SharedKernel;
 
@@ -20,11 +21,46 @@ public sealed class TransactionBehavior<TRequest, TResponse>(IUnitOfWork unitOfW
     {
         var response = await next();
 
-        if (response.IsSuccess)
+        if (!response.IsSuccess)
+        {
+            return response;
+        }
+
+        try
         {
             await unitOfWork.SaveChangesAsync(cancellationToken);
         }
+        catch (ConcurrencyConflictException)
+        {
+            // Step 6 §1.5: the If-Match value a handler applied to a tracked entity's
+            // OriginalValue (via the matching repository's ApplyExpectedVersion) didn't match
+            // what's actually in the database - someone else updated the resource in between.
+            return CreateFailure(Error.Conflict(
+                "Concurrency.Conflict", "This resource was modified by someone else. Reload and try again."));
+        }
 
         return response;
+    }
+
+    // TResponse is always Result or Result<T> by convention (Step 1 §6) - same reflection-based
+    // construction ValidationBehavior already uses, for the same reason (structs can't share a
+    // common base to construct a failure through directly).
+    private static TResponse CreateFailure(Error error)
+    {
+        var responseType = typeof(TResponse);
+
+        if (responseType == typeof(Result))
+        {
+            return (TResponse)(object)Result.Failure(error);
+        }
+
+        if (responseType.IsGenericType && responseType.GetGenericTypeDefinition() == typeof(Result<>))
+        {
+            var failureMethod = responseType.GetMethod(nameof(Result<object>.Failure), [typeof(Error)])!;
+            return (TResponse)failureMethod.Invoke(null, [error])!;
+        }
+
+        throw new InvalidOperationException(
+            $"{responseType.Name} must be Result or Result<T> to use TransactionBehavior.");
     }
 }

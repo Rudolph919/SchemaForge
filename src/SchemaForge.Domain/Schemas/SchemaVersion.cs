@@ -9,7 +9,7 @@ namespace SchemaForge.Domain.Schemas;
 // a metadata-only operation like renaming the schema. This is where the SchemaNode tree
 // actually lives, and where immutability-after-publish is enforced at the method level (every
 // mutating method below guards on Status == Draft), not just by convention.
-public sealed class SchemaVersion : TenantOwnedAggregateRoot<Guid>
+public sealed class SchemaVersion : TenantOwnedAggregateRoot<Guid>, IHasRowVersion
 {
     public Guid SchemaDefinitionId { get; private set; }
 
@@ -18,6 +18,8 @@ public sealed class SchemaVersion : TenantOwnedAggregateRoot<Guid>
     public SchemaLifecycleStatus Status { get; private set; }
 
     public string? ChangeSummary { get; private set; }
+
+    public uint RowVersion { get; private set; }
 
     public DateTimeOffset? PublishedAt { get; private set; }
 

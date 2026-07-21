@@ -16,6 +16,8 @@ public sealed class GetSchemaDefinitionHandler(ISchemaDefinitionRepository schem
             return Result<SchemaDefinitionDetail>.Failure(Error.NotFound("SchemaDefinition.NotFound", "No such schema."));
         }
 
-        return new SchemaDefinitionDetail(definition.Id, definition.ProjectId, definition.Name, definition.Description, definition.Tags);
+        return new SchemaDefinitionDetail(
+            definition.Id, definition.ProjectId, definition.Name, definition.Description, definition.Tags,
+            definition.RowVersion);
     }
 }

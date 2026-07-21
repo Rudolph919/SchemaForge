@@ -17,6 +17,7 @@ public sealed class GetComponentVersionHandler(IComponentVersionRepository compo
 
         return new ComponentVersionDetail(
             version.Id, version.ComponentDefinitionId, version.VersionNumber, version.Status,
-            version.ChangeSummary, version.PublishedAt, version.RootNode, version.LocalDefinitions);
+            version.ChangeSummary, version.PublishedAt, version.RootNode, version.LocalDefinitions,
+            version.RowVersion);
     }
 }

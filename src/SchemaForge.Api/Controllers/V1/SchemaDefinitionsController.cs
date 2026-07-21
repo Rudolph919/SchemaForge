@@ -36,6 +36,11 @@ public sealed class SchemaDefinitionsController(ISender sender) : ControllerBase
     public async Task<IActionResult> Get(Guid schemaDefinitionId, CancellationToken cancellationToken)
     {
         var result = await sender.Send(new GetSchemaDefinitionQuery(schemaDefinitionId), cancellationToken);
+        if (result.IsSuccess)
+        {
+            Response.SetETag(result.Value.RowVersion);
+        }
+
         return result.ToActionResult(d => d.ToResponse());
     }
 
@@ -43,7 +48,12 @@ public sealed class SchemaDefinitionsController(ISender sender) : ControllerBase
     public async Task<IActionResult> UpdateDetails(
         Guid schemaDefinitionId, UpdateSchemaDefinitionDetailsRequest request, CancellationToken cancellationToken)
     {
-        var result = await sender.Send(request.ToCommand(schemaDefinitionId), cancellationToken);
+        if (!Request.TryGetIfMatch(out var expectedVersion))
+        {
+            return ConcurrencyExtensions.PreconditionRequired();
+        }
+
+        var result = await sender.Send(request.ToCommand(schemaDefinitionId, expectedVersion), cancellationToken);
         return result.ToActionResult();
     }
 }

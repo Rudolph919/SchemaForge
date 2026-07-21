@@ -21,6 +21,8 @@ public sealed class UpdateTestSuiteDetailsHandler(ITestSuiteRepository testSuite
         }
 
         suite.UpdateDescription(request.Description);
+        testSuiteRepository.ApplyExpectedVersion(suite, request.ExpectedVersion);
+
         return Result.Success();
     }
 }

@@ -19,4 +19,5 @@ public sealed record SchemaVersionDetail(
     string? ChangeSummary,
     DateTimeOffset? PublishedAt,
     SchemaNode RootNode,
-    IReadOnlyList<LocalDefinition> LocalDefinitions);
+    IReadOnlyList<LocalDefinition> LocalDefinitions,
+    uint RowVersion);

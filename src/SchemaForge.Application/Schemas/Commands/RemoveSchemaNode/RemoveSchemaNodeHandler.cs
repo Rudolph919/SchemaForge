@@ -14,6 +14,12 @@ public sealed class RemoveSchemaNodeHandler(ISchemaVersionRepository schemaVersi
             return Result.Failure(Error.NotFound("SchemaVersion.NotFound", "No such schema version."));
         }
 
-        return version.RemoveNode(request.NodeId);
+        var result = version.RemoveNode(request.NodeId);
+        if (result.IsSuccess)
+        {
+            schemaVersionRepository.ApplyExpectedVersion(version, request.ExpectedVersion);
+        }
+
+        return result;
     }
 }

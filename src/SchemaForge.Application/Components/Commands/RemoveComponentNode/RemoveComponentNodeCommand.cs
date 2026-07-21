@@ -3,4 +3,4 @@ using SchemaForge.SharedKernel;
 
 namespace SchemaForge.Application.Components.Commands.RemoveComponentNode;
 
-public sealed record RemoveComponentNodeCommand(Guid ComponentVersionId, Guid NodeId) : ICommand<Result>;
+public sealed record RemoveComponentNodeCommand(Guid ComponentVersionId, Guid NodeId, uint ExpectedVersion) : ICommand<Result>;

@@ -14,8 +14,9 @@ public static class ProjectsMappingExtensions
 
     public static CreateProjectResponse ToResponse(this CreateProjectResult result) => new(result.ProjectId);
 
-    public static UpdateProjectDetailsCommand ToCommand(this UpdateProjectDetailsRequest request, Guid projectId) =>
-        new(projectId, request.Name, request.Description);
+    public static UpdateProjectDetailsCommand ToCommand(
+        this UpdateProjectDetailsRequest request, Guid projectId, uint expectedVersion) =>
+        new(projectId, request.Name, request.Description, expectedVersion);
 
     public static ProjectSummaryResponse ToResponse(this ProjectSummary summary) =>
         new(summary.Id, summary.Name, summary.Description, summary.Status.ToContract());

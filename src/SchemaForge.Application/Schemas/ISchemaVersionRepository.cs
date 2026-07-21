@@ -20,6 +20,8 @@ public interface ISchemaVersionRepository
     Task<SemVer?> GetLatestVersionNumberAsync(Guid schemaDefinitionId, CancellationToken cancellationToken);
 
     Task AddAsync(SchemaVersion version, CancellationToken cancellationToken);
+
+    void ApplyExpectedVersion(SchemaVersion version, uint expectedVersion);
 }
 
 public sealed record SchemaVersionSummary(

@@ -12,6 +12,8 @@ public interface ITestSuiteRepository
     Task<bool> ExistsByNameAsync(Guid schemaDefinitionId, string name, CancellationToken cancellationToken);
 
     Task AddAsync(TestSuite suite, CancellationToken cancellationToken);
+
+    void ApplyExpectedVersion(TestSuite suite, uint expectedVersion);
 }
 
 public sealed record TestSuiteSummary(Guid Id, string Name, string? Description, int CaseCount);

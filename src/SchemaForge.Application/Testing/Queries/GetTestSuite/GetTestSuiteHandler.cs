@@ -18,6 +18,6 @@ public sealed class GetTestSuiteHandler(ITestSuiteRepository testSuiteRepository
             .Select(c => new TestCaseDetail(c.Id, c.Name, c.InputJson, c.Expectation))
             .ToList();
 
-        return new TestSuiteDetail(suite.Id, suite.SchemaDefinitionId, suite.Name, suite.Description, cases);
+        return new TestSuiteDetail(suite.Id, suite.SchemaDefinitionId, suite.Name, suite.Description, cases, suite.RowVersion);
     }
 }
