@@ -1,5 +1,6 @@
 import { httpClient } from '@/shared/api/httpClient'
 import type { SourceDocumentResponse, UploadSourceDocumentResponse } from '@/types/sourceDocuments'
+import type { SchemaSuggestionResponse } from '@/types/schemas'
 
 export const documentsApi = {
   listDocuments: (projectId: string) =>
@@ -9,4 +10,7 @@ export const documentsApi = {
     httpClient.upload<UploadSourceDocumentResponse>(`/api/v1/projects/${projectId}/documents`, file),
 
   deleteDocument: (documentId: string) => httpClient.delete<void>(`/api/v1/documents/${documentId}`),
+
+  suggestSchema: (documentId: string) =>
+    httpClient.post<SchemaSuggestionResponse>(`/api/v1/documents/${documentId}/suggest-schema`),
 }
