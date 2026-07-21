@@ -407,7 +407,14 @@ onMounted(load)
               placeholder="object.required-property-missing"
               class="flex-1 rounded-md border border-slate-300 px-2 py-1.5 text-sm font-mono focus:border-slate-500 focus:outline-none"
             />
-            <button type="button" class="text-slate-400 hover:text-red-600" @click="removeExpectedErrorRow(i)">✕</button>
+            <button
+              type="button"
+              aria-label="Remove expected error"
+              class="text-slate-400 hover:text-red-600"
+              @click="removeExpectedErrorRow(i)"
+            >
+              ✕
+            </button>
           </div>
         </div>
 
