@@ -18,6 +18,11 @@ psql -v ON_ERROR_STOP=1 --username "$POSTGRES_USER" --dbname "$POSTGRES_DB" <<-E
     \$\$;
 
     GRANT CONNECT ON DATABASE "$POSTGRES_DB" TO "$POSTGRES_APP_USER";
+    -- Also lets the app role CREATE SCHEMA - needed once Hangfire (Step 1 §8) is wired up, since
+    -- it installs its own tables into a dedicated "hangfire" schema on first run, using this same
+    -- app connection. Everything the app creates from here on (Hangfire's own tables included)
+    -- stays owned by this role, so no further grant is needed inside that schema.
+    GRANT CREATE ON DATABASE "$POSTGRES_DB" TO "$POSTGRES_APP_USER";
     GRANT USAGE ON SCHEMA public TO "$POSTGRES_APP_USER";
 
     -- Tables don't exist yet at first-init time (migrations haven't run) - default privileges

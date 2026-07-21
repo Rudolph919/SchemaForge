@@ -1,5 +1,6 @@
 using System.Text;
 using System.Text.Json.Serialization;
+using Hangfire;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.IdentityModel.Tokens;
 using SchemaForge.Infrastructure.Security;
@@ -60,6 +61,10 @@ public static class ApiServiceCollectionExtensions
         if (app.Environment.IsDevelopment())
         {
             app.MapOpenApi();
+
+            // Dev-only diagnostic view into job history/retries, same gating as Swagger above -
+            // not worth a dashboard-specific auth policy for a portfolio project's local tooling.
+            app.UseHangfireDashboard();
         }
 
         app.UseExceptionHandler();
