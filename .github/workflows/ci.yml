@@ -9,6 +9,10 @@ on:
 permissions:
   contents: read
   checks: write
+  # gitleaks-action's PR-scan mode lists the PR's commits via the GitHub API - without this it
+  # 403s ("Resource not accessible by integration"), confirmed live on the first CI run this was
+  # added in.
+  pull-requests: read
 
 jobs:
   build-and-test:
