@@ -6,4 +6,10 @@ namespace SchemaForge.Application.Common.Abstractions;
 public interface ICurrentUserContext
 {
     Guid? UserId { get; }
+
+    // Parallel to ITenantContext.SetTenant - lets a background job (no HttpContext to resolve
+    // from, same gap documented on ITestRunExecutor) tell the ambient context who it's acting on
+    // behalf of, so AuditLogEntryProjector can still attribute an ActorUserId to events the job
+    // raises instead of finding no ambient user at all.
+    void SetUser(Guid userId);
 }

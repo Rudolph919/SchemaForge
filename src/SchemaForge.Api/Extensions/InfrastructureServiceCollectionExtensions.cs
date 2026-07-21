@@ -10,6 +10,7 @@ using SchemaForge.Application.Schemas;
 using SchemaForge.Application.Testing;
 using SchemaForge.Application.Validation;
 using SchemaForge.Application.Workspaces;
+using SchemaForge.Application.Audit;
 using SchemaForge.Infrastructure.BackgroundJobs;
 using SchemaForge.Infrastructure.Caching;
 using SchemaForge.Infrastructure.Persistence;
@@ -30,6 +31,7 @@ public static class InfrastructureServiceCollectionExtensions
         services.AddScoped<ICurrentUserContext, HttpCurrentUserContext>();
 
         services.AddSingleton<AuditableEntitySaveChangesInterceptor>();
+        services.AddScoped<DomainEventDispatchInterceptor>();
         services.AddScoped<TenantSessionConnectionInterceptor>();
         services.AddDbContext<SchemaForgeDbContext>((sp, options) =>
         {
@@ -37,6 +39,7 @@ public static class InfrastructureServiceCollectionExtensions
                 .UseNpgsql(configuration.GetConnectionString("Default"))
                 .AddInterceptors(
                     sp.GetRequiredService<AuditableEntitySaveChangesInterceptor>(),
+                    sp.GetRequiredService<DomainEventDispatchInterceptor>(),
                     sp.GetRequiredService<TenantSessionConnectionInterceptor>());
         });
 
@@ -54,6 +57,7 @@ public static class InfrastructureServiceCollectionExtensions
         services.AddScoped<IComponentVersionRepository, ComponentVersionRepository>();
         services.AddScoped<ITestSuiteRepository, TestSuiteRepository>();
         services.AddScoped<ITestRunRepository, TestRunRepository>();
+        services.AddScoped<IAuditLogEntryRepository, AuditLogEntryRepository>();
         services.AddScoped<IUnitOfWork, UnitOfWork>();
 
         // First real consumer of the Step 1 §8 background job infrastructure (Schema Testing's
