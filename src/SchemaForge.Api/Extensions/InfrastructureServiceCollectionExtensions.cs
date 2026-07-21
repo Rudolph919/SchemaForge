@@ -11,6 +11,7 @@ using SchemaForge.Application.Testing;
 using SchemaForge.Application.Validation;
 using SchemaForge.Application.Workspaces;
 using SchemaForge.Application.Audit;
+using SchemaForge.Infrastructure.Ai;
 using SchemaForge.Infrastructure.BackgroundJobs;
 using SchemaForge.Infrastructure.Caching;
 using SchemaForge.Infrastructure.Persistence;
@@ -88,6 +89,11 @@ public static class InfrastructureServiceCollectionExtensions
 
         services.Configure<StorageSettings>(configuration.GetSection("Storage"));
         services.AddSingleton<IFileStorage, MinioFileStorage>();
+
+        // Step 9 §2's flagship seam - only NullSchemaSuggestionProvider exists today, registered
+        // unconditionally. A real provider drops in later behind the same interface with no
+        // change to Application/Domain or anything upstream of this one line.
+        services.AddSingleton<ISchemaSuggestionProvider, NullSchemaSuggestionProvider>();
 
         // Backs the documentation cache (Step 1 §9, Step 6 §2.4) - genuinely S3-API-compatible-style
         // swap-behind-an-interface story via IDistributedCache, same as IFileStorage's own seam.

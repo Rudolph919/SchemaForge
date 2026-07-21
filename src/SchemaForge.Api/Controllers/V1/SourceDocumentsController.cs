@@ -4,6 +4,7 @@ using Microsoft.AspNetCore.Mvc;
 using SchemaForge.Api.Common;
 using SchemaForge.Api.Mapping;
 using SchemaForge.Api.Middleware;
+using SchemaForge.Application.Schemas.Queries.SuggestSchema;
 using SchemaForge.Application.Workspaces.Commands.DeleteSourceDocument;
 using SchemaForge.Application.Workspaces.Commands.UploadSourceDocument;
 using SchemaForge.Application.Workspaces.Queries.ListSourceDocuments;
@@ -44,5 +45,15 @@ public sealed class SourceDocumentsController(ISender sender) : ControllerBase
     {
         var result = await sender.Send(new DeleteSourceDocumentCommand(documentId), cancellationToken);
         return result.ToActionResult();
+    }
+
+    // Absolute route, same reasoning as Delete above. Step 9 §2: a quarantined proposal, never
+    // persisted - a POST despite being a query (no side effect of its own), matching /validate's
+    // established "expensive/external, not a plain GET" shape.
+    [HttpPost("/api/v1/documents/{documentId:guid}/suggest-schema")]
+    public async Task<IActionResult> SuggestSchema(Guid documentId, CancellationToken cancellationToken)
+    {
+        var result = await sender.Send(new SuggestSchemaQuery(documentId), cancellationToken);
+        return result.ToActionResult(s => s.ToResponse());
     }
 }
