@@ -6,6 +6,7 @@ using SchemaForge.Api.Common;
 using SchemaForge.Api.Mapping;
 using SchemaForge.Api.Middleware;
 using SchemaForge.Application.Schemas.Commands.AddSchemaNode;
+using SchemaForge.Application.Schemas.Commands.CreateDraftFromSuggestion;
 using SchemaForge.Application.Schemas.Commands.CreateSchemaVersion;
 using SchemaForge.Application.Schemas.Commands.DeprecateSchemaVersion;
 using SchemaForge.Application.Schemas.Commands.ImportSchemaVersion;
@@ -49,6 +50,19 @@ public sealed class SchemaVersionsController(ISender sender) : ControllerBase
         var result = await sender.Send(
             new ImportSchemaVersionCommand(schemaId, schemaDocument, bumpKind.ToDomain(), changeSummary), cancellationToken);
         return result.ToActionResult(r => new CreateSchemaVersionResponse(r.SchemaVersionId, r.VersionNumber.ToString()));
+    }
+
+    // Step 9 §2: the suggestion itself is never persisted, so the client resends it in full
+    // (round-tripped from suggest-schema's response) along with which node ids were accepted -
+    // materializing them onto a real Draft via the exact same domain methods CreateSchemaVersion/
+    // AddNode already use, so every aggregate invariant applies identically here.
+    [HttpPost("api/v1/schemas/{schemaId:guid}/versions/from-suggestion")]
+    [Idempotent]
+    public async Task<IActionResult> CreateFromSuggestion(
+        Guid schemaId, CreateDraftFromSuggestionRequest request, CancellationToken cancellationToken)
+    {
+        var result = await sender.Send(request.ToCommand(schemaId), cancellationToken);
+        return result.ToActionResult(r => r.ToResponse());
     }
 
     [HttpGet("api/v1/schemas/{schemaId:guid}/versions")]
