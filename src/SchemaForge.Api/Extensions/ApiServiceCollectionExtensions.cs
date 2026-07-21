@@ -1,8 +1,13 @@
+using System.Globalization;
 using System.Text;
 using System.Text.Json.Serialization;
+using System.Threading.RateLimiting;
 using Hangfire;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.AspNetCore.RateLimiting;
+using Microsoft.IdentityModel.JsonWebTokens;
 using Microsoft.IdentityModel.Tokens;
+using SchemaForge.Api.Middleware;
 using SchemaForge.Infrastructure.Security;
 
 namespace SchemaForge.Api.Extensions;
@@ -10,6 +15,12 @@ namespace SchemaForge.Api.Extensions;
 public static class ApiServiceCollectionExtensions
 {
     private const string FrontendCorsPolicy = "Frontend";
+
+    // Named policy for unauthenticated, abuse-prone endpoints (login/register) - much stricter
+    // than the global default, since these are exactly the endpoints a credential-stuffing or
+    // account-enumeration attempt would hammer. Everything else gets the more generous global
+    // limiter below; both apply simultaneously where an endpoint opts into this one.
+    public const string AuthRateLimitPolicy = "auth";
 
     public static IServiceCollection AddApi(this IServiceCollection services, IConfiguration configuration)
     {
@@ -53,6 +64,45 @@ public static class ApiServiceCollectionExtensions
         services.AddCors(options => options.AddPolicy(FrontendCorsPolicy, policy =>
             policy.WithOrigins(frontendOrigin).AllowAnyHeader().AllowAnyMethod()));
 
+        services.AddRateLimiter(options =>
+        {
+            options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
+
+            // Partitioned by authenticated user where there is one, falling back to remote IP
+            // for anonymous requests - a shared IP (office, NAT) shouldn't throttle every user
+            // behind it once any one of them is authenticated and identifiable individually.
+            options.GlobalLimiter = PartitionedRateLimiter.Create<HttpContext, string>(httpContext =>
+            {
+                var key = httpContext.User.Identity?.IsAuthenticated == true
+                    ? $"user:{httpContext.User.FindFirst(JwtRegisteredClaimNames.Sub)?.Value}"
+                    : $"ip:{httpContext.Connection.RemoteIpAddress}";
+
+                return RateLimitPartition.GetFixedWindowLimiter(key, _ => new FixedWindowRateLimiterOptions
+                {
+                    PermitLimit = 200,
+                    Window = TimeSpan.FromMinutes(1),
+                    QueueLimit = 0,
+                });
+            });
+
+            options.AddPolicy(AuthRateLimitPolicy, httpContext =>
+                RateLimitPartition.GetFixedWindowLimiter(
+                    $"ip:{httpContext.Connection.RemoteIpAddress}",
+                    _ => new FixedWindowRateLimiterOptions
+                    {
+                        PermitLimit = 10,
+                        Window = TimeSpan.FromMinutes(1),
+                        QueueLimit = 0,
+                    }));
+
+            options.OnRejected = (context, cancellationToken) =>
+            {
+                context.HttpContext.Response.Headers.RetryAfter =
+                    ((int)TimeSpan.FromMinutes(1).TotalSeconds).ToString(CultureInfo.InvariantCulture);
+                return ValueTask.CompletedTask;
+            };
+        });
+
         return services;
     }
 
@@ -70,8 +120,15 @@ public static class ApiServiceCollectionExtensions
         app.UseExceptionHandler();
         app.UseHttpsRedirection();
         app.UseCors(FrontendCorsPolicy);
+        app.UseRateLimiter();
         app.UseAuthentication();
         app.UseAuthorization();
+
+        // Needs the endpoint (for the [Idempotent] marker) and the authenticated user (to scope
+        // the cache key) both already resolved - after UseAuthorization, before the terminal
+        // controller dispatch.
+        app.UseMiddleware<IdempotencyKeyMiddleware>();
+
         app.MapControllers();
 
         return app;

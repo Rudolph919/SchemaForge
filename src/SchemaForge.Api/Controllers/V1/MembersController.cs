@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using SchemaForge.Api.Common;
 using SchemaForge.Api.Mapping;
+using SchemaForge.Api.Middleware;
 using SchemaForge.Application.Organizations.Commands.AcceptInvitation;
 using SchemaForge.Application.Organizations.Commands.RevokeMember;
 using SchemaForge.Application.Organizations.Queries.ListMembers;
@@ -23,6 +24,7 @@ public sealed class MembersController(ISender sender) : ControllerBase
     }
 
     [HttpPost("invite")]
+    [Idempotent]
     public async Task<IActionResult> Invite(InviteMemberRequest request, CancellationToken cancellationToken)
     {
         var result = await sender.Send(request.ToCommand(), cancellationToken);

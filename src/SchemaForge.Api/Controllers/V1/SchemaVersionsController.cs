@@ -4,6 +4,7 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using SchemaForge.Api.Common;
 using SchemaForge.Api.Mapping;
+using SchemaForge.Api.Middleware;
 using SchemaForge.Application.Schemas.Commands.AddSchemaNode;
 using SchemaForge.Application.Schemas.Commands.CreateSchemaVersion;
 using SchemaForge.Application.Schemas.Commands.DeprecateSchemaVersion;
@@ -28,6 +29,7 @@ namespace SchemaForge.Api.Controllers.V1;
 public sealed class SchemaVersionsController(ISender sender) : ControllerBase
 {
     [HttpPost("api/v1/schemas/{schemaId:guid}/versions")]
+    [Idempotent]
     public async Task<IActionResult> Create(
         Guid schemaId, CreateSchemaVersionRequest request, CancellationToken cancellationToken)
     {
@@ -39,6 +41,7 @@ public sealed class SchemaVersionsController(ISender sender) : ControllerBase
     // bumpKind/changeSummary as query params - the same "create a new Draft" shape as
     // POST .../versions, just populated from an existing document instead of starting empty.
     [HttpPost("api/v1/schemas/{schemaId:guid}/import")]
+    [Idempotent]
     public async Task<IActionResult> Import(
         Guid schemaId, [FromBody] JsonElement schemaDocument, [FromQuery] VersionBumpKind bumpKind,
         [FromQuery] string? changeSummary, CancellationToken cancellationToken)
@@ -97,6 +100,7 @@ public sealed class SchemaVersionsController(ISender sender) : ControllerBase
     }
 
     [HttpPost("api/v1/schema-versions/{schemaVersionId:guid}/publish")]
+    [Idempotent]
     public async Task<IActionResult> Publish(Guid schemaVersionId, CancellationToken cancellationToken)
     {
         var result = await sender.Send(new PublishSchemaVersionCommand(schemaVersionId), cancellationToken);
@@ -104,6 +108,7 @@ public sealed class SchemaVersionsController(ISender sender) : ControllerBase
     }
 
     [HttpPost("api/v1/schema-versions/{schemaVersionId:guid}/deprecate")]
+    [Idempotent]
     public async Task<IActionResult> Deprecate(Guid schemaVersionId, CancellationToken cancellationToken)
     {
         var result = await sender.Send(new DeprecateSchemaVersionCommand(schemaVersionId), cancellationToken);

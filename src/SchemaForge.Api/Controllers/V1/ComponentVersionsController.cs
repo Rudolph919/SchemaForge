@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using SchemaForge.Api.Common;
 using SchemaForge.Api.Mapping;
+using SchemaForge.Api.Middleware;
 using SchemaForge.Application.Components.Commands.AddComponentNode;
 using SchemaForge.Application.Components.Commands.CreateComponentVersion;
 using SchemaForge.Application.Components.Commands.DeprecateComponentVersion;
@@ -25,6 +26,7 @@ namespace SchemaForge.Api.Controllers.V1;
 public sealed class ComponentVersionsController(ISender sender) : ControllerBase
 {
     [HttpPost("api/v1/components/{componentId:guid}/versions")]
+    [Idempotent]
     public async Task<IActionResult> Create(
         Guid componentId, CreateComponentVersionRequest request, CancellationToken cancellationToken)
     {
@@ -79,6 +81,7 @@ public sealed class ComponentVersionsController(ISender sender) : ControllerBase
     }
 
     [HttpPost("api/v1/component-versions/{componentVersionId:guid}/publish")]
+    [Idempotent]
     public async Task<IActionResult> Publish(Guid componentVersionId, CancellationToken cancellationToken)
     {
         var result = await sender.Send(new PublishComponentVersionCommand(componentVersionId), cancellationToken);
@@ -86,6 +89,7 @@ public sealed class ComponentVersionsController(ISender sender) : ControllerBase
     }
 
     [HttpPost("api/v1/component-versions/{componentVersionId:guid}/deprecate")]
+    [Idempotent]
     public async Task<IActionResult> Deprecate(Guid componentVersionId, CancellationToken cancellationToken)
     {
         var result = await sender.Send(new DeprecateComponentVersionCommand(componentVersionId), cancellationToken);
