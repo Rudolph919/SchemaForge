@@ -31,6 +31,14 @@ public sealed class OrganizationMembershipConfiguration : IEntityTypeConfigurati
 
         builder.HasIndex(m => new { m.OrganizationId, m.UserId }).IsUnique();
 
+        // Step 7's index audit: Login/SwitchOrganization discovery (GetFirstByUserIdAsync/
+        // GetAllByUserIdAsync) queries by UserId alone, with IgnoreQueryFilters() - there's no
+        // ambient tenant yet at that point, so the organization-id-leading composite above can't
+        // help this specific, hot-path query. EF's FK convention already creates an equivalent
+        // index automatically (confirmed: this produced no new migration), but declaring it here
+        // documents that it's load-bearing for the login path specifically.
+        builder.HasIndex(m => m.UserId);
+
         builder.Property(m => m.Role).HasConversion<string>().HasColumnName("role").IsRequired();
         builder.Property(m => m.Status).HasConversion<string>().HasColumnName("status").IsRequired();
 
