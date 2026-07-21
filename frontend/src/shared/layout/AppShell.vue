@@ -11,6 +11,7 @@ const navLinks = [
   { to: '/components', label: 'Components' },
   { to: '/teams', label: 'Teams' },
   { to: '/members', label: 'Members' },
+  { to: '/audit-log', label: 'Audit Log' },
   { to: '/settings', label: 'Settings' },
 ]
 

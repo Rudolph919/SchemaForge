@@ -56,6 +56,11 @@ const router = createRouter({
           component: () => import('@/modules/testing/views/TestSuiteDetailView.vue'),
         },
         {
+          path: 'audit-log',
+          name: 'audit-log',
+          component: () => import('@/modules/audit/views/AuditLogView.vue'),
+        },
+        {
           path: 'teams',
           name: 'teams',
           component: () => import('@/modules/organizations/views/TeamsListView.vue'),
