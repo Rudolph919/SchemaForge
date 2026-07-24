@@ -2,6 +2,7 @@
 import { onMounted, ref } from 'vue'
 import { componentsApi } from '@/modules/components-library/api/componentsApi'
 import { ApiError } from '@/shared/api/httpClient'
+import { useIdempotencyKey } from '@/shared/api/idempotencyKey'
 import Modal from '@/shared/components/Modal.vue'
 import type { ComponentDefinitionSummaryResponse } from '@/types/components'
 
@@ -14,6 +15,7 @@ const name = ref('')
 const description = ref('')
 const createError = ref<string | null>(null)
 const isSubmitting = ref(false)
+const createComponentKey = useIdempotencyKey()
 
 async function loadComponents() {
   isLoading.value = true
@@ -31,6 +33,7 @@ function openCreate() {
   name.value = ''
   description.value = ''
   createError.value = null
+  createComponentKey.reset()
   isCreateOpen.value = true
 }
 
@@ -38,7 +41,11 @@ async function handleCreate() {
   createError.value = null
   isSubmitting.value = true
   try {
-    await componentsApi.createComponent({ name: name.value, description: description.value || null })
+    await componentsApi.createComponent(
+      { name: name.value, description: description.value || null },
+      createComponentKey.get(),
+    )
+    createComponentKey.reset()
     isCreateOpen.value = false
     await loadComponents()
   } catch (error) {

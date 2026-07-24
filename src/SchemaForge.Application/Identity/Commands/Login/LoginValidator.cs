@@ -2,7 +2,7 @@ using FluentValidation;
 
 namespace SchemaForge.Application.Identity.Commands.Login;
 
-public sealed class LoginValidator : AbstractValidator<LoginQuery>
+public sealed class LoginValidator : AbstractValidator<LoginCommand>
 {
     public LoginValidator()
     {

@@ -275,6 +275,117 @@ public class SchemaVersionTests
     }
 
     [Fact]
+    public void ReparentNodeAsObjectProperty_moves_a_node_to_a_different_object_and_preserves_its_id_and_content()
+    {
+        var version = NewDraft();
+        var oldParentId = version.AddObjectProperty(version.RootNode.Id, "oldParent", NodeKind.Object).Value;
+        var newParentId = version.AddObjectProperty(version.RootNode.Id, "newParent", NodeKind.Object).Value;
+        var nodeId = version.AddObjectProperty(oldParentId, "amount", NodeKind.Number).Value;
+        version.UpdateNode(nodeId, SchemaNodeContent.Empty(NodeKind.Number) with { Description = "keep me" });
+
+        var result = version.ReparentNodeAsObjectProperty(nodeId, newParentId, "movedAmount");
+
+        result.IsSuccess.Should().BeTrue();
+        var oldParent = version.RootNode.Properties.Single(n => n.Id == oldParentId);
+        var newParent = version.RootNode.Properties.Single(n => n.Id == newParentId);
+        oldParent.Properties.Should().BeEmpty();
+        var moved = newParent.Properties.Should().ContainSingle(n => n.Id == nodeId).Subject;
+        moved.PropertyName.Should().Be("movedAmount");
+        moved.Description.Should().Be("keep me");
+        version.DomainEvents.Should().Contain(e => e is SchemaNodeUpdated);
+    }
+
+    [Fact]
+    public void ReparentNodeAsObjectProperty_fails_when_the_new_parent_is_not_an_object()
+    {
+        var version = NewDraft();
+        var nodeId = version.AddObjectProperty(version.RootNode.Id, "amount", NodeKind.Number).Value;
+        var stringNodeId = version.AddObjectProperty(version.RootNode.Id, "notAContainer", NodeKind.String).Value;
+
+        var result = version.ReparentNodeAsObjectProperty(nodeId, stringNodeId, "amount");
+
+        result.IsFailure.Should().BeTrue();
+    }
+
+    [Fact]
+    public void ReparentNodeAsObjectProperty_fails_on_a_duplicate_property_name_at_the_new_parent()
+    {
+        var version = NewDraft();
+        var newParentId = version.AddObjectProperty(version.RootNode.Id, "newParent", NodeKind.Object).Value;
+        version.AddObjectProperty(newParentId, "amount", NodeKind.Number);
+        var nodeId = version.AddObjectProperty(version.RootNode.Id, "otherAmount", NodeKind.Number).Value;
+
+        var result = version.ReparentNodeAsObjectProperty(nodeId, newParentId, "amount");
+
+        result.IsFailure.Should().BeTrue();
+    }
+
+    [Fact]
+    public void ReparentNodeAsArrayItems_moves_a_node_into_an_arrays_items_slot()
+    {
+        var version = NewDraft();
+        var arrayId = version.AddObjectProperty(version.RootNode.Id, "items", NodeKind.Array).Value;
+        var nodeId = version.AddObjectProperty(version.RootNode.Id, "shape", NodeKind.Object).Value;
+
+        var result = version.ReparentNodeAsArrayItems(nodeId, arrayId);
+
+        result.IsSuccess.Should().BeTrue();
+        version.RootNode.Properties.Should().NotContain(n => n.Id == nodeId);
+        var arrayNode = version.RootNode.Properties.Single(n => n.Id == arrayId);
+        arrayNode.ItemsNode.Should().NotBeNull();
+        arrayNode.ItemsNode!.Id.Should().Be(nodeId);
+        arrayNode.ItemsNode.PropertyName.Should().BeNull();
+    }
+
+    [Fact]
+    public void ReparentNode_cannot_move_the_root_node()
+    {
+        var version = NewDraft();
+        var newParentId = version.AddObjectProperty(version.RootNode.Id, "newParent", NodeKind.Object).Value;
+
+        var result = version.ReparentNodeAsObjectProperty(version.RootNode.Id, newParentId, "root");
+
+        result.IsFailure.Should().BeTrue();
+    }
+
+    [Fact]
+    public void ReparentNode_cannot_move_a_node_under_itself()
+    {
+        var version = NewDraft();
+        var nodeId = version.AddObjectProperty(version.RootNode.Id, "amount", NodeKind.Object).Value;
+
+        var result = version.ReparentNodeAsObjectProperty(nodeId, nodeId, "amount");
+
+        result.IsFailure.Should().BeTrue();
+    }
+
+    [Fact]
+    public void ReparentNode_cannot_move_a_node_under_its_own_descendant()
+    {
+        var version = NewDraft();
+        var parentId = version.AddObjectProperty(version.RootNode.Id, "parent", NodeKind.Object).Value;
+        var childId = version.AddObjectProperty(parentId, "child", NodeKind.Object).Value;
+
+        var result = version.ReparentNodeAsObjectProperty(parentId, childId, "parent");
+
+        result.IsFailure.Should().BeTrue();
+        // The tree must be untouched - a failed reparent attempt shouldn't have detached
+        // anything on the way to discovering the cycle.
+        version.RootNode.Properties.Should().ContainSingle(n => n.Id == parentId);
+    }
+
+    [Fact]
+    public void ReparentNode_fails_when_the_new_parent_does_not_exist()
+    {
+        var version = NewDraft();
+        var nodeId = version.AddObjectProperty(version.RootNode.Id, "amount", NodeKind.Object).Value;
+
+        var result = version.ReparentNodeAsObjectProperty(nodeId, Guid.NewGuid(), "amount");
+
+        result.IsFailure.Should().BeTrue();
+    }
+
+    [Fact]
     public void RemoveNode_removes_a_nested_property_and_raises_an_event()
     {
         var version = NewDraft();
@@ -380,6 +491,7 @@ public class SchemaVersionTests
         version.AddObjectProperty(version.RootNode.Id, "another", NodeKind.String).IsFailure.Should().BeTrue();
         version.UpdateNode(nodeId, SchemaNodeContent.Empty(NodeKind.Number)).IsFailure.Should().BeTrue();
         version.MoveNode(nodeId, 5).IsFailure.Should().BeTrue();
+        version.ReparentNodeAsObjectProperty(nodeId, version.RootNode.Id, "renamed").IsFailure.Should().BeTrue();
         version.RemoveNode(nodeId).IsFailure.Should().BeTrue();
         version.AddLocalDefinition("Category", NodeKind.Object).IsFailure.Should().BeTrue();
     }

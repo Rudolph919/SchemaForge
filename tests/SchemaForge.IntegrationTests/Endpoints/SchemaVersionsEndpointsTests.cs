@@ -163,6 +163,106 @@ public sealed class SchemaVersionsEndpointsTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task Reparenting_a_node_to_a_different_object_moves_it_and_a_cycle_attempt_is_rejected()
+    {
+        var token = await RegisterAndLoginAsync("Org A");
+        var schemaDefinitionId = await CreateSchemaDefinitionAsync(token, "Invoice Schema");
+        var versionId = await CreateDraftVersionAsync(token, schemaDefinitionId);
+        var rootId = (await GetVersionAsync(versionId, token)).RootNode.Id;
+
+        var oldParent = await AddPropertyAsync(versionId, rootId, "oldParent", NodeKind.Object, token);
+        var newParent = await AddPropertyAsync(versionId, rootId, "newParent", NodeKind.Object, token);
+        var nodeId = await AddPropertyAsync(versionId, oldParent, "amount", NodeKind.Number, token);
+
+        var reparentResponse = await SendAsync(
+            HttpMethod.Post, $"/api/v1/schema-versions/{versionId}/nodes/{nodeId}/move", token,
+            new MoveSchemaNodeRequest(0, newParent, NodeAttachmentKind.ObjectProperty, "movedAmount"));
+        reparentResponse.StatusCode.Should().Be(HttpStatusCode.NoContent);
+
+        var detail = await GetVersionAsync(versionId, token);
+        var oldParentNode = detail.RootNode.Properties.Should().ContainSingle(p => p.Id == oldParent).Subject;
+        var newParentNode = detail.RootNode.Properties.Should().ContainSingle(p => p.Id == newParent).Subject;
+        oldParentNode.Properties.Should().BeEmpty();
+        newParentNode.Properties.Should().ContainSingle(p => p.Id == nodeId && p.PropertyName == "movedAmount");
+
+        // Cannot move newParent underneath the node that now lives inside it - that would
+        // detach the very subtree newParent is already part of.
+        var cycleResponse = await SendAsync(
+            HttpMethod.Post, $"/api/v1/schema-versions/{versionId}/nodes/{newParent}/move", token,
+            new MoveSchemaNodeRequest(0, nodeId, NodeAttachmentKind.ObjectProperty, "newParent"));
+        cycleResponse.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+    }
+
+    [Fact]
+    public async Task Adding_a_property_within_a_local_definition_and_removing_the_definition_is_reflected_in_the_reloaded_tree()
+    {
+        var token = await RegisterAndLoginAsync("Org A");
+        var schemaDefinitionId = await CreateSchemaDefinitionAsync(token, "Invoice Schema");
+        var versionId = await CreateDraftVersionAsync(token, schemaDefinitionId);
+
+        var addDefinitionResponse = await SendAsync(
+            HttpMethod.Post, $"/api/v1/schema-versions/{versionId}/local-definitions", token,
+            new AddLocalDefinitionRequest("Money", NodeKind.Object));
+        addDefinitionResponse.StatusCode.Should().Be(HttpStatusCode.OK);
+        var definition = await addDefinitionResponse.Content.ReadFromJsonAsync<AddLocalDefinitionResponse>(TestJson.Options);
+
+        var detailAfterAdd = await GetVersionAsync(versionId, token);
+        var localDefinition = detailAfterAdd.LocalDefinitions.Should()
+            .ContainSingle(d => d.Id == definition!.LocalDefinitionId && d.Name == "Money").Subject;
+
+        // Nodes inside a local definition's own tree are reachable through the same node
+        // endpoints as the main tree (NodeTreeOperations.FindNode searches both) - proves the
+        // add-local-definition wiring actually attaches a real, usable SchemaNode subtree.
+        var propertyNodeId = await AddPropertyAsync(versionId, localDefinition.RootNode.Id, "amount", NodeKind.Number, token);
+        var detailAfterProperty = await GetVersionAsync(versionId, token);
+        detailAfterProperty.LocalDefinitions.Should().ContainSingle(d => d.Id == definition!.LocalDefinitionId)
+            .Subject.RootNode.Properties.Should().ContainSingle(p => p.Id == propertyNodeId && p.PropertyName == "amount");
+
+        var eTag = await GetETagAsync($"/api/v1/schema-versions/{versionId}", token);
+        var removeResponse = await SendAsync(
+            HttpMethod.Delete, $"/api/v1/schema-versions/{versionId}/local-definitions/{definition!.LocalDefinitionId}", token,
+            ifMatch: eTag);
+        removeResponse.StatusCode.Should().Be(HttpStatusCode.NoContent);
+
+        var detailAfterRemove = await GetVersionAsync(versionId, token);
+        detailAfterRemove.LocalDefinitions.Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task Adding_a_local_definition_with_a_duplicate_name_returns_conflict()
+    {
+        var token = await RegisterAndLoginAsync("Org A");
+        var schemaDefinitionId = await CreateSchemaDefinitionAsync(token, "Invoice Schema");
+        var versionId = await CreateDraftVersionAsync(token, schemaDefinitionId);
+
+        await SendAsync(HttpMethod.Post, $"/api/v1/schema-versions/{versionId}/local-definitions", token,
+            new AddLocalDefinitionRequest("Money", NodeKind.Object));
+
+        var secondResponse = await SendAsync(
+            HttpMethod.Post, $"/api/v1/schema-versions/{versionId}/local-definitions", token,
+            new AddLocalDefinitionRequest("Money", NodeKind.String));
+
+        secondResponse.StatusCode.Should().Be(HttpStatusCode.Conflict);
+    }
+
+    [Fact]
+    public async Task Removing_a_local_definition_without_an_If_Match_header_returns_precondition_required()
+    {
+        var token = await RegisterAndLoginAsync("Org A");
+        var schemaDefinitionId = await CreateSchemaDefinitionAsync(token, "Invoice Schema");
+        var versionId = await CreateDraftVersionAsync(token, schemaDefinitionId);
+        var addResponse = await SendAsync(
+            HttpMethod.Post, $"/api/v1/schema-versions/{versionId}/local-definitions", token,
+            new AddLocalDefinitionRequest("Money", NodeKind.Object));
+        var definition = await addResponse.Content.ReadFromJsonAsync<AddLocalDefinitionResponse>(TestJson.Options);
+
+        var removeResponse = await SendAsync(
+            HttpMethod.Delete, $"/api/v1/schema-versions/{versionId}/local-definitions/{definition!.LocalDefinitionId}", token);
+
+        removeResponse.StatusCode.Should().Be((HttpStatusCode)428);
+    }
+
+    [Fact]
     public async Task A_second_draft_cannot_be_created_while_one_already_exists()
     {
         var token = await RegisterAndLoginAsync("Org A");

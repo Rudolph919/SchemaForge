@@ -15,6 +15,7 @@ const emit = defineEmits<{
   editNode: [node: SchemaNodeResponse]
   removeNode: [node: SchemaNodeResponse]
   moveNode: [node: SchemaNodeResponse, direction: 'up' | 'down', siblings: SchemaNodeResponse[]]
+  reparentNode: [node: SchemaNodeResponse]
 }>()
 
 const sortedProperties = computed(() => [...props.node.properties].sort((a, b) => a.order - b.order))
@@ -153,6 +154,14 @@ function kindSummary(node: SchemaNodeResponse): string {
         <button
           v-if="!isRoot"
           type="button"
+          class="rounded px-2 py-0.5 text-xs text-slate-600 hover:bg-slate-100"
+          @click="emit('reparentNode', node)"
+        >
+          Move to…
+        </button>
+        <button
+          v-if="!isRoot"
+          type="button"
           class="rounded px-2 py-0.5 text-xs text-red-500 hover:bg-red-50"
           @click="emit('removeNode', node)"
         >
@@ -183,6 +192,7 @@ function kindSummary(node: SchemaNodeResponse): string {
         @attach-node="(id, kind) => emit('attachNode', id, kind)"
         @edit-node="(n) => emit('editNode', n)"
         @remove-node="(n) => emit('removeNode', n)"
+        @reparent-node="(n) => emit('reparentNode', n)"
         @move-node="(n, dir, sibs) => emit('moveNode', n, dir, sibs)"
       />
       <SchemaNodeTree
@@ -196,6 +206,7 @@ function kindSummary(node: SchemaNodeResponse): string {
         @attach-node="(id, kind) => emit('attachNode', id, kind)"
         @edit-node="(n) => emit('editNode', n)"
         @remove-node="(n) => emit('removeNode', n)"
+        @reparent-node="(n) => emit('reparentNode', n)"
         @move-node="(n, dir, sibs) => emit('moveNode', n, dir, sibs)"
       />
       <SchemaNodeTree
@@ -208,6 +219,7 @@ function kindSummary(node: SchemaNodeResponse): string {
         @attach-node="(id, kind) => emit('attachNode', id, kind)"
         @edit-node="(n) => emit('editNode', n)"
         @remove-node="(n) => emit('removeNode', n)"
+        @reparent-node="(n) => emit('reparentNode', n)"
         @move-node="(n, dir, sibs) => emit('moveNode', n, dir, sibs)"
       />
       <SchemaNodeTree
@@ -221,6 +233,7 @@ function kindSummary(node: SchemaNodeResponse): string {
         @attach-node="(id, kind) => emit('attachNode', id, kind)"
         @edit-node="(n) => emit('editNode', n)"
         @remove-node="(n) => emit('removeNode', n)"
+        @reparent-node="(n) => emit('reparentNode', n)"
         @move-node="(n, dir, sibs) => emit('moveNode', n, dir, sibs)"
       />
       <SchemaNodeTree
@@ -233,6 +246,7 @@ function kindSummary(node: SchemaNodeResponse): string {
         @attach-node="(id, kind) => emit('attachNode', id, kind)"
         @edit-node="(n) => emit('editNode', n)"
         @remove-node="(n) => emit('removeNode', n)"
+        @reparent-node="(n) => emit('reparentNode', n)"
         @move-node="(n, dir, sibs) => emit('moveNode', n, dir, sibs)"
       />
       <SchemaNodeTree
@@ -245,6 +259,7 @@ function kindSummary(node: SchemaNodeResponse): string {
         @attach-node="(id, kind) => emit('attachNode', id, kind)"
         @edit-node="(n) => emit('editNode', n)"
         @remove-node="(n) => emit('removeNode', n)"
+        @reparent-node="(n) => emit('reparentNode', n)"
         @move-node="(n, dir, sibs) => emit('moveNode', n, dir, sibs)"
       />
       <SchemaNodeTree
@@ -257,6 +272,7 @@ function kindSummary(node: SchemaNodeResponse): string {
         @attach-node="(id, kind) => emit('attachNode', id, kind)"
         @edit-node="(n) => emit('editNode', n)"
         @remove-node="(n) => emit('removeNode', n)"
+        @reparent-node="(n) => emit('reparentNode', n)"
         @move-node="(n, dir, sibs) => emit('moveNode', n, dir, sibs)"
       />
     </div>

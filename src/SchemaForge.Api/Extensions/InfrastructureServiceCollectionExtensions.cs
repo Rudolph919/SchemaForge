@@ -45,6 +45,7 @@ public static class InfrastructureServiceCollectionExtensions
         });
 
         services.AddScoped<IUserRepository, UserRepository>();
+        services.AddScoped<IRefreshTokenRepository, RefreshTokenRepository>();
         services.AddScoped<IOrganizationRepository, OrganizationRepository>();
         services.AddScoped<IOrganizationMembershipRepository, OrganizationMembershipRepository>();
         services.AddScoped<IOrganizationOwnershipGuard, OrganizationOwnershipGuard>();
@@ -84,6 +85,7 @@ public static class InfrastructureServiceCollectionExtensions
         }
 
         services.AddScoped<IPasswordHasher, IdentityPasswordHasher>();
+        services.AddScoped<IRefreshTokenHasher, RefreshTokenHasher>();
         services.AddScoped<IJwtTokenService, JwtTokenService>();
         services.Configure<JwtSettings>(configuration.GetSection("Jwt"));
 

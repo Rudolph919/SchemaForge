@@ -3,6 +3,7 @@ import { computed, onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { schemaDefinitionsApi } from '@/modules/schemas/api/schemaDefinitionsApi'
 import { ApiError } from '@/shared/api/httpClient'
+import { useIdempotencyKey } from '@/shared/api/idempotencyKey'
 import Modal from '@/shared/components/Modal.vue'
 import type { SchemaDefinitionSummaryResponse } from '@/types/schemas'
 
@@ -19,6 +20,7 @@ const name = ref('')
 const description = ref('')
 const createError = ref<string | null>(null)
 const isSubmitting = ref(false)
+const createSchemaKey = useIdempotencyKey()
 
 async function loadSchemas() {
   isLoading.value = true
@@ -36,6 +38,7 @@ function openCreate() {
   name.value = ''
   description.value = ''
   createError.value = null
+  createSchemaKey.reset()
   isCreateOpen.value = true
 }
 
@@ -43,10 +46,12 @@ async function handleCreate() {
   createError.value = null
   isSubmitting.value = true
   try {
-    await schemaDefinitionsApi.createSchema(projectId.value, {
-      name: name.value,
-      description: description.value || null,
-    })
+    await schemaDefinitionsApi.createSchema(
+      projectId.value,
+      { name: name.value, description: description.value || null },
+      createSchemaKey.get(),
+    )
+    createSchemaKey.reset()
     isCreateOpen.value = false
     await loadSchemas()
   } catch (error) {

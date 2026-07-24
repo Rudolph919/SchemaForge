@@ -1,5 +1,7 @@
 import { httpClient } from '@/shared/api/httpClient'
 import type {
+  AddLocalDefinitionRequest,
+  AddLocalDefinitionResponse,
   AddSchemaNodeRequest,
   AddSchemaNodeResponse,
   CreateDraftFromSuggestionRequest,
@@ -25,28 +27,38 @@ export const schemaVersionsApi = {
   listVersions: (schemaDefinitionId: string) =>
     httpClient.get<SchemaVersionSummaryResponse[]>(`/api/v1/schemas/${schemaDefinitionId}/versions`),
 
-  createVersion: (schemaDefinitionId: string, request: CreateSchemaVersionRequest) =>
-    httpClient.post<CreateSchemaVersionResponse>(`/api/v1/schemas/${schemaDefinitionId}/versions`, request),
+  createVersion: (schemaDefinitionId: string, request: CreateSchemaVersionRequest, idempotencyKey: string) =>
+    httpClient.post<CreateSchemaVersionResponse>(`/api/v1/schemas/${schemaDefinitionId}/versions`, request, idempotencyKey),
 
   getVersion: (schemaVersionId: string) =>
-    httpClient.get<SchemaVersionDetailResponse>(`/api/v1/schema-versions/${schemaVersionId}`),
+    httpClient.getWithETag<SchemaVersionDetailResponse>(`/api/v1/schema-versions/${schemaVersionId}`),
 
   addNode: (schemaVersionId: string, request: AddSchemaNodeRequest) =>
     httpClient.post<AddSchemaNodeResponse>(`/api/v1/schema-versions/${schemaVersionId}/nodes`, request),
 
-  updateNode: (schemaVersionId: string, nodeId: string, request: UpdateSchemaNodeRequest) =>
-    httpClient.patch<void>(`/api/v1/schema-versions/${schemaVersionId}/nodes/${nodeId}`, request),
+  updateNode: (schemaVersionId: string, nodeId: string, request: UpdateSchemaNodeRequest, ifMatch: string) =>
+    httpClient.patch<void>(`/api/v1/schema-versions/${schemaVersionId}/nodes/${nodeId}`, request, ifMatch),
 
-  removeNode: (schemaVersionId: string, nodeId: string) =>
-    httpClient.delete<void>(`/api/v1/schema-versions/${schemaVersionId}/nodes/${nodeId}`),
+  removeNode: (schemaVersionId: string, nodeId: string, ifMatch: string) =>
+    httpClient.delete<void>(`/api/v1/schema-versions/${schemaVersionId}/nodes/${nodeId}`, ifMatch),
+
+  addLocalDefinition: (schemaVersionId: string, request: AddLocalDefinitionRequest) =>
+    httpClient.post<AddLocalDefinitionResponse>(`/api/v1/schema-versions/${schemaVersionId}/local-definitions`, request),
+
+  removeLocalDefinition: (schemaVersionId: string, localDefinitionId: string, ifMatch: string) =>
+    httpClient.delete<void>(
+      `/api/v1/schema-versions/${schemaVersionId}/local-definitions/${localDefinitionId}`,
+      ifMatch,
+    ),
 
   moveNode: (schemaVersionId: string, nodeId: string, request: MoveSchemaNodeRequest) =>
     httpClient.post<void>(`/api/v1/schema-versions/${schemaVersionId}/nodes/${nodeId}/move`, request),
 
-  publish: (schemaVersionId: string) => httpClient.post<void>(`/api/v1/schema-versions/${schemaVersionId}/publish`),
+  publish: (schemaVersionId: string, idempotencyKey: string) =>
+    httpClient.post<void>(`/api/v1/schema-versions/${schemaVersionId}/publish`, undefined, idempotencyKey),
 
-  deprecate: (schemaVersionId: string) =>
-    httpClient.post<void>(`/api/v1/schema-versions/${schemaVersionId}/deprecate`),
+  deprecate: (schemaVersionId: string, idempotencyKey: string) =>
+    httpClient.post<void>(`/api/v1/schema-versions/${schemaVersionId}/deprecate`, undefined, idempotencyKey),
 
   validate: (schemaVersionId: string, payload: unknown) =>
     httpClient.post<ValidateJsonPayloadResponse>(`/api/v1/schema-versions/${schemaVersionId}/validate`, payload),
@@ -65,15 +77,27 @@ export const schemaVersionsApi = {
 
   // Raw JSON Schema document as the request body - httpClient.post JSON.stringifies whatever is
   // passed as `document`, matching the backend's [FromBody] JsonElement pattern.
-  importSchema: (schemaDefinitionId: string, document: unknown, bumpKind: VersionBumpKind, changeSummary: string | null) =>
+  importSchema: (
+    schemaDefinitionId: string,
+    document: unknown,
+    bumpKind: VersionBumpKind,
+    changeSummary: string | null,
+    idempotencyKey: string,
+  ) =>
     httpClient.post<CreateSchemaVersionResponse>(
       `/api/v1/schemas/${schemaDefinitionId}/import?bumpKind=${bumpKind}${changeSummary ? `&changeSummary=${encodeURIComponent(changeSummary)}` : ''}`,
       document,
+      idempotencyKey,
     ),
 
-  createDraftFromSuggestion: (schemaDefinitionId: string, request: CreateDraftFromSuggestionRequest) =>
+  createDraftFromSuggestion: (
+    schemaDefinitionId: string,
+    request: CreateDraftFromSuggestionRequest,
+    idempotencyKey: string,
+  ) =>
     httpClient.post<CreateDraftFromSuggestionResponse>(
       `/api/v1/schemas/${schemaDefinitionId}/versions/from-suggestion`,
       request,
+      idempotencyKey,
     ),
 }

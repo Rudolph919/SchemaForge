@@ -10,8 +10,8 @@ import type {
 export const organizationsApi = {
   listMembers: () => httpClient.get<OrganizationMemberResponse[]>('/api/v1/organizations/members'),
 
-  inviteMember: (request: InviteMemberRequest) =>
-    httpClient.post<InviteMemberResponse>('/api/v1/organizations/members/invite', request),
+  inviteMember: (request: InviteMemberRequest, idempotencyKey: string) =>
+    httpClient.post<InviteMemberResponse>('/api/v1/organizations/members/invite', request, idempotencyKey),
 
   acceptInvitation: (membershipId: string) =>
     httpClient.post<void>(`/api/v1/organizations/members/${membershipId}/accept`),

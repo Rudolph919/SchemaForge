@@ -10,7 +10,7 @@ public class LoginValidatorTests
     [Fact]
     public void Valid_command_passes()
     {
-        var result = _validator.Validate(new LoginQuery("ada@example.com", "correct-horse-battery"));
+        var result = _validator.Validate(new LoginCommand("ada@example.com", "correct-horse-battery"));
 
         result.IsValid.Should().BeTrue();
     }
@@ -21,7 +21,7 @@ public class LoginValidatorTests
     [InlineData("ada@example.com", "")]
     public void Invalid_command_fails(string email, string password)
     {
-        var result = _validator.Validate(new LoginQuery(email, password));
+        var result = _validator.Validate(new LoginCommand(email, password));
 
         result.IsValid.Should().BeFalse();
     }

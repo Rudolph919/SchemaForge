@@ -60,9 +60,12 @@ public static class ApiServiceCollectionExtensions
         services.AddAuthorization();
 
         // Named, narrow policy for the Vite dev server - not a wildcard CORS policy.
+        // ETag must be explicitly exposed - it isn't in the small set of response headers
+        // (Content-Type, Content-Length, etc.) browsers expose to JS on cross-origin responses by
+        // default, and the frontend needs to read it to round-trip If-Match on the next mutation.
         var frontendOrigin = configuration["Cors:FrontendOrigin"] ?? "http://localhost:5173";
         services.AddCors(options => options.AddPolicy(FrontendCorsPolicy, policy =>
-            policy.WithOrigins(frontendOrigin).AllowAnyHeader().AllowAnyMethod()));
+            policy.WithOrigins(frontendOrigin).AllowAnyHeader().AllowAnyMethod().WithExposedHeaders("ETag")));
 
         services.AddRateLimiter(options =>
         {

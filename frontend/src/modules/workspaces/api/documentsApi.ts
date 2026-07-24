@@ -6,8 +6,8 @@ export const documentsApi = {
   listDocuments: (projectId: string) =>
     httpClient.get<SourceDocumentResponse[]>(`/api/v1/projects/${projectId}/documents`),
 
-  uploadDocument: (projectId: string, file: File) =>
-    httpClient.upload<UploadSourceDocumentResponse>(`/api/v1/projects/${projectId}/documents`, file),
+  uploadDocument: (projectId: string, file: File, idempotencyKey: string) =>
+    httpClient.upload<UploadSourceDocumentResponse>(`/api/v1/projects/${projectId}/documents`, file, idempotencyKey),
 
   deleteDocument: (documentId: string) => httpClient.delete<void>(`/api/v1/documents/${documentId}`),
 

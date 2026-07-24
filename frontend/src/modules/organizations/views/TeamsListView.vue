@@ -2,6 +2,7 @@
 import { onMounted, ref } from 'vue'
 import { teamsApi } from '@/modules/organizations/api/teamsApi'
 import { ApiError } from '@/shared/api/httpClient'
+import { useIdempotencyKey } from '@/shared/api/idempotencyKey'
 import Modal from '@/shared/components/Modal.vue'
 import type { TeamSummaryResponse } from '@/types/teams'
 
@@ -14,6 +15,7 @@ const name = ref('')
 const description = ref('')
 const createError = ref<string | null>(null)
 const isSubmitting = ref(false)
+const createTeamKey = useIdempotencyKey()
 
 async function loadTeams() {
   isLoading.value = true
@@ -31,6 +33,7 @@ function openCreate() {
   name.value = ''
   description.value = ''
   createError.value = null
+  createTeamKey.reset()
   isCreateOpen.value = true
 }
 
@@ -38,7 +41,8 @@ async function handleCreate() {
   createError.value = null
   isSubmitting.value = true
   try {
-    await teamsApi.createTeam({ name: name.value, description: description.value || null })
+    await teamsApi.createTeam({ name: name.value, description: description.value || null }, createTeamKey.get())
+    createTeamKey.reset()
     isCreateOpen.value = false
     await loadTeams()
   } catch (error) {

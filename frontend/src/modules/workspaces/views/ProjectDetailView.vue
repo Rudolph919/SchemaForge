@@ -4,6 +4,7 @@ import { useRoute, useRouter } from 'vue-router'
 import { projectsApi } from '@/modules/workspaces/api/projectsApi'
 import { documentsApi } from '@/modules/workspaces/api/documentsApi'
 import { ApiError } from '@/shared/api/httpClient'
+import { useIdempotencyKey } from '@/shared/api/idempotencyKey'
 import type { ProjectDetailResponse } from '@/types/projects'
 import type { SourceDocumentResponse } from '@/types/sourceDocuments'
 
@@ -12,6 +13,7 @@ const router = useRouter()
 const projectId = computed(() => route.params.id as string)
 
 const project = ref<ProjectDetailResponse | null>(null)
+const projectETag = ref<string | null>(null)
 const documents = ref<SourceDocumentResponse[]>([])
 const loadError = ref<string | null>(null)
 
@@ -24,6 +26,7 @@ const isSaving = ref(false)
 const isUploading = ref(false)
 const uploadError = ref<string | null>(null)
 const fileInput = ref<HTMLInputElement | null>(null)
+const uploadDocumentKey = useIdempotencyKey()
 
 async function load() {
   loadError.value = null
@@ -32,7 +35,8 @@ async function load() {
       projectsApi.getProject(projectId.value),
       documentsApi.listDocuments(projectId.value),
     ])
-    project.value = projectResponse
+    project.value = projectResponse.data
+    projectETag.value = projectResponse.etag
     documents.value = documentsResponse
   } catch (error) {
     loadError.value = error instanceof ApiError ? error.message : 'Could not load project.'
@@ -49,16 +53,27 @@ function startEditing() {
 
 async function handleSaveDetails() {
   editError.value = null
+  if (!projectETag.value) {
+    editError.value = 'Missing project ETag - reloading before saving.'
+    await load()
+    return
+  }
   isSaving.value = true
   try {
-    await projectsApi.updateProjectDetails(projectId.value, {
-      name: editName.value,
-      description: editDescription.value || null,
-    })
+    await projectsApi.updateProjectDetails(
+      projectId.value,
+      { name: editName.value, description: editDescription.value || null },
+      projectETag.value,
+    )
     isEditing.value = false
     await load()
   } catch (error) {
-    editError.value = error instanceof ApiError ? error.message : 'Could not save changes.'
+    if (error instanceof ApiError && error.status === 409) {
+      editError.value = 'This project changed elsewhere. Reloaded the latest version - please redo your edit.'
+      await load()
+    } else {
+      editError.value = error instanceof ApiError ? error.message : 'Could not save changes.'
+    }
   } finally {
     isSaving.value = false
   }
@@ -85,7 +100,8 @@ async function handleFileChange(event: Event) {
   uploadError.value = null
   isUploading.value = true
   try {
-    await documentsApi.uploadDocument(projectId.value, file)
+    await documentsApi.uploadDocument(projectId.value, file, uploadDocumentKey.get())
+    uploadDocumentKey.reset()
     documents.value = await documentsApi.listDocuments(projectId.value)
   } catch (error) {
     uploadError.value = error instanceof ApiError ? error.message : 'Could not upload document.'

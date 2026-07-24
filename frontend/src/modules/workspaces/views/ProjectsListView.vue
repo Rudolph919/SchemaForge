@@ -2,6 +2,7 @@
 import { onMounted, ref } from 'vue'
 import { projectsApi } from '@/modules/workspaces/api/projectsApi'
 import { ApiError } from '@/shared/api/httpClient'
+import { useIdempotencyKey } from '@/shared/api/idempotencyKey'
 import Modal from '@/shared/components/Modal.vue'
 import type { ProjectSummaryResponse } from '@/types/projects'
 
@@ -14,6 +15,7 @@ const name = ref('')
 const description = ref('')
 const createError = ref<string | null>(null)
 const isSubmitting = ref(false)
+const createProjectKey = useIdempotencyKey()
 
 async function loadProjects() {
   isLoading.value = true
@@ -31,6 +33,7 @@ function openCreate() {
   name.value = ''
   description.value = ''
   createError.value = null
+  createProjectKey.reset()
   isCreateOpen.value = true
 }
 
@@ -38,7 +41,11 @@ async function handleCreate() {
   createError.value = null
   isSubmitting.value = true
   try {
-    await projectsApi.createProject({ name: name.value, description: description.value || null })
+    await projectsApi.createProject(
+      { name: name.value, description: description.value || null },
+      createProjectKey.get(),
+    )
+    createProjectKey.reset()
     isCreateOpen.value = false
     await loadProjects()
   } catch (error) {

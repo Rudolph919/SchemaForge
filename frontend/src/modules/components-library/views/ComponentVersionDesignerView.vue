@@ -53,6 +53,7 @@ const router = useRouter()
 const versionId = computed(() => route.params.componentVersionId as string)
 
 const version = ref<ComponentVersionDetailResponse | null>(null)
+const versionETag = ref<string | null>(null)
 const loadError = ref<string | null>(null)
 const actionError = ref<string | null>(null)
 
@@ -61,7 +62,9 @@ const isEditable = computed(() => version.value?.status === 'Draft')
 async function load() {
   loadError.value = null
   try {
-    version.value = await componentVersionsApi.getVersion(versionId.value)
+    const { data, etag } = await componentVersionsApi.getVersion(versionId.value)
+    version.value = data
+    versionETag.value = etag
   } catch (error) {
     loadError.value = error instanceof ApiError ? error.message : 'Could not load component version.'
   }
@@ -159,6 +162,11 @@ async function handleSaveNode() {
   if (!editingNode.value) return
   const node = editingNode.value
   editError.value = null
+  if (!versionETag.value) {
+    editError.value = 'Missing version ETag - reloading before saving.'
+    await load()
+    return
+  }
   isSavingNode.value = true
   try {
     const request: UpdateSchemaNodeRequest = {
@@ -211,11 +219,16 @@ async function handleSaveNode() {
           : null,
     }
 
-    await componentVersionsApi.updateNode(versionId.value, node.id, request)
+    await componentVersionsApi.updateNode(versionId.value, node.id, request, versionETag.value)
     editingNode.value = null
     await load()
   } catch (error) {
-    editError.value = error instanceof ApiError ? error.message : 'Could not save node.'
+    if (error instanceof ApiError && error.status === 409) {
+      editError.value = 'This version changed elsewhere. Reloaded the latest version - please redo your edit.'
+      await load()
+    } else {
+      editError.value = error instanceof ApiError ? error.message : 'Could not save node.'
+    }
   } finally {
     isSavingNode.value = false
   }
@@ -224,11 +237,21 @@ async function handleSaveNode() {
 // --- Remove / move ---
 async function handleRemoveNode(node: SchemaNodeResponse) {
   actionError.value = null
+  if (!versionETag.value) {
+    actionError.value = 'Missing version ETag - reloading before removing.'
+    await load()
+    return
+  }
   try {
-    await componentVersionsApi.removeNode(versionId.value, node.id)
+    await componentVersionsApi.removeNode(versionId.value, node.id, versionETag.value)
     await load()
   } catch (error) {
-    actionError.value = error instanceof ApiError ? error.message : 'Could not remove node.'
+    if (error instanceof ApiError && error.status === 409) {
+      actionError.value = 'This version changed elsewhere. Reloaded the latest version - please retry.'
+      await load()
+    } else {
+      actionError.value = error instanceof ApiError ? error.message : 'Could not remove node.'
+    }
   }
 }
 
@@ -241,8 +264,18 @@ async function handleMoveNode(node: SchemaNodeResponse, direction: 'up' | 'down'
 
   actionError.value = null
   try {
-    await componentVersionsApi.moveNode(versionId.value, node.id, { newOrder: partner.order })
-    await componentVersionsApi.moveNode(versionId.value, partner.id, { newOrder: node.order })
+    await componentVersionsApi.moveNode(versionId.value, node.id, {
+      newOrder: partner.order,
+      newParentNodeId: null,
+      attachmentKind: null,
+      propertyName: null,
+    })
+    await componentVersionsApi.moveNode(versionId.value, partner.id, {
+      newOrder: node.order,
+      newParentNodeId: null,
+      attachmentKind: null,
+      propertyName: null,
+    })
     await load()
   } catch (error) {
     actionError.value = error instanceof ApiError ? error.message : 'Could not move node.'

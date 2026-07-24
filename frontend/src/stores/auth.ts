@@ -24,9 +24,10 @@ export const useAuthStore = defineStore('auth', () => {
   const organizationId = computed(() => claimsFromToken(accessToken.value).organizationId)
   const displayName = computed(() => claimsFromToken(accessToken.value).displayName)
 
-  function setToken(token: string) {
-    accessToken.value = token
-    tokenStorage.set(token)
+  function setTokens(newAccessToken: string, refreshToken: string) {
+    accessToken.value = newAccessToken
+    tokenStorage.set(newAccessToken)
+    tokenStorage.setRefreshToken(refreshToken)
   }
 
   async function register(request: RegisterRequest) {
@@ -38,17 +39,25 @@ export const useAuthStore = defineStore('auth', () => {
 
   async function login(request: LoginRequest) {
     const response = await authApi.login(request)
-    setToken(response.accessToken)
+    setTokens(response.accessToken, response.refreshToken)
   }
 
   async function switchOrganization(organizationId: string) {
     const response = await authApi.switchOrganization({ organizationId })
-    setToken(response.accessToken)
+    setTokens(response.accessToken, response.refreshToken)
   }
 
-  function logout() {
+  async function logout() {
+    const refreshToken = tokenStorage.getRefreshToken()
     accessToken.value = null
     tokenStorage.clear()
+    tokenStorage.clearRefreshToken()
+
+    // Best-effort - the local session is already gone regardless of whether the server-side
+    // revoke succeeds, so a network failure here shouldn't stop the user from logging out.
+    if (refreshToken !== null) {
+      await authApi.logout({ refreshToken }).catch(() => undefined)
+    }
   }
 
   return {

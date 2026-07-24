@@ -8,9 +8,9 @@ using SchemaForge.Domain.Organizations;
 
 namespace SchemaForge.Infrastructure.Security;
 
-// Access tokens only for this vertical slice - refresh token issuance/rotation (Step 6 §2.1's
-// separate /auth/refresh endpoint) needs its own storage and revocation story, out of scope
-// until an authenticated session actually needs to outlive one access token's lifetime.
+// Access tokens only - refresh token issuance/rotation lives in RefreshTokenHasher plus the
+// RefreshToken aggregate/repository (Step 6 §2.1's /auth/refresh), which don't need a signing key
+// or any of this class's JWT machinery.
 public sealed class JwtTokenService(IOptions<JwtSettings> jwtSettings) : IJwtTokenService
 {
     private readonly JwtSettings _settings = jwtSettings.Value;

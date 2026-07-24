@@ -160,6 +160,61 @@ public sealed class ComponentVersion : TenantOwnedAggregateRoot<Guid>, IHasRowVe
         return result;
     }
 
+    public Result ReparentNodeAsObjectProperty(Guid nodeId, Guid newParentNodeId, string propertyName)
+    {
+        var draftCheck = EnsureDraft();
+        if (draftCheck.IsFailure) return draftCheck;
+
+        var result = NodeTreeOperations.ReparentAsObjectProperty(RootNode, _localDefinitions, nodeId, newParentNodeId, propertyName);
+        if (result.IsSuccess) RaiseDomainEvent(new ComponentNodeUpdated(Id, nodeId));
+
+        return result;
+    }
+
+    public Result ReparentNodeAsArrayPrefixItem(Guid nodeId, Guid newParentNodeId)
+    {
+        var draftCheck = EnsureDraft();
+        if (draftCheck.IsFailure) return draftCheck;
+
+        var result = NodeTreeOperations.ReparentAsArrayPrefixItem(RootNode, _localDefinitions, nodeId, newParentNodeId);
+        if (result.IsSuccess) RaiseDomainEvent(new ComponentNodeUpdated(Id, nodeId));
+
+        return result;
+    }
+
+    public Result ReparentNodeAsArrayItems(Guid nodeId, Guid newParentNodeId)
+    {
+        var draftCheck = EnsureDraft();
+        if (draftCheck.IsFailure) return draftCheck;
+
+        var result = NodeTreeOperations.ReparentAsArrayItems(RootNode, _localDefinitions, nodeId, newParentNodeId);
+        if (result.IsSuccess) RaiseDomainEvent(new ComponentNodeUpdated(Id, nodeId));
+
+        return result;
+    }
+
+    public Result ReparentNodeAsCompositionBranch(Guid nodeId, Guid newParentNodeId)
+    {
+        var draftCheck = EnsureDraft();
+        if (draftCheck.IsFailure) return draftCheck;
+
+        var result = NodeTreeOperations.ReparentAsCompositionBranch(RootNode, _localDefinitions, nodeId, newParentNodeId);
+        if (result.IsSuccess) RaiseDomainEvent(new ComponentNodeUpdated(Id, nodeId));
+
+        return result;
+    }
+
+    public Result ReparentNodeAsConditionalNode(Guid nodeId, Guid newParentNodeId, ConditionalSlot slot)
+    {
+        var draftCheck = EnsureDraft();
+        if (draftCheck.IsFailure) return draftCheck;
+
+        var result = NodeTreeOperations.ReparentAsConditionalNode(RootNode, _localDefinitions, nodeId, newParentNodeId, slot);
+        if (result.IsSuccess) RaiseDomainEvent(new ComponentNodeUpdated(Id, nodeId));
+
+        return result;
+    }
+
     public Result RemoveNode(Guid nodeId)
     {
         var draftCheck = EnsureDraft();
@@ -176,7 +231,10 @@ public sealed class ComponentVersion : TenantOwnedAggregateRoot<Guid>, IHasRowVe
         var draftCheck = EnsureDraft();
         if (draftCheck.IsFailure) return Result<Guid>.Failure(draftCheck.Error);
 
-        return NodeTreeOperations.AddLocalDefinition(_localDefinitions, name, rootKind);
+        var result = NodeTreeOperations.AddLocalDefinition(_localDefinitions, name, rootKind);
+        if (result.IsSuccess) RaiseDomainEvent(new ComponentLocalDefinitionAdded(Id, result.Value, name));
+
+        return result;
     }
 
     public Result RemoveLocalDefinition(Guid localDefinitionId)
@@ -184,7 +242,10 @@ public sealed class ComponentVersion : TenantOwnedAggregateRoot<Guid>, IHasRowVe
         var draftCheck = EnsureDraft();
         if (draftCheck.IsFailure) return draftCheck;
 
-        return NodeTreeOperations.RemoveLocalDefinition(_localDefinitions, localDefinitionId);
+        var result = NodeTreeOperations.RemoveLocalDefinition(_localDefinitions, localDefinitionId);
+        if (result.IsSuccess) RaiseDomainEvent(new ComponentLocalDefinitionRemoved(Id, localDefinitionId));
+
+        return result;
     }
 
     private Result EnsureDraft() => Status == SchemaLifecycleStatus.Draft

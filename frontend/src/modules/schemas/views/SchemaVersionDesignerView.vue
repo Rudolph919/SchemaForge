@@ -30,9 +30,6 @@ import type { ValidateJsonPayloadResponse, ValidationRunSummaryResponse } from '
 const ADDABLE_KINDS: NodeKind[] = ['Object', 'Array', 'String', 'Number', 'Integer', 'Boolean', 'Null']
 const COMPOSITION_KINDS: CompositionKind[] = ['OneOf', 'AnyOf', 'AllOf', 'Not']
 
-// Local definitions (within-version reuse for recursive schemas) have no Application command or
-// Api endpoint yet - only the Domain method (SchemaVersion.AddLocalDefinition) exists. Wiring
-// them up is backend work first, so they're out of scope for this frontend-only slice.
 const ATTACHMENT_LABELS: Record<NodeAttachmentKind, string> = {
   ObjectProperty: 'Property',
   ArrayPrefixItem: 'Prefix Item',
@@ -61,6 +58,7 @@ const router = useRouter()
 const versionId = computed(() => route.params.versionId as string)
 
 const version = ref<SchemaVersionDetailResponse | null>(null)
+const versionETag = ref<string | null>(null)
 const loadError = ref<string | null>(null)
 const actionError = ref<string | null>(null)
 
@@ -69,7 +67,9 @@ const isEditable = computed(() => version.value?.status === 'Draft')
 async function load() {
   loadError.value = null
   try {
-    version.value = await schemaVersionsApi.getVersion(versionId.value)
+    const { data, etag } = await schemaVersionsApi.getVersion(versionId.value)
+    version.value = data
+    versionETag.value = etag
   } catch (error) {
     loadError.value = error instanceof ApiError ? error.message : 'Could not load schema version.'
   }
@@ -180,6 +180,11 @@ function clearReference() {
   referenceVersions.value = []
 }
 
+// --- Local definition reference picker ---
+// Simpler than the component picker above - local definitions already live on the loaded
+// version (no separate fetch), and there's no "version" concept to pin, just the definition id.
+const editLocalDefinitionRef = ref('')
+
 function openEditNode(node: SchemaNodeResponse) {
   editingNode.value = node
   editDescription.value = node.description ?? ''
@@ -206,6 +211,7 @@ function openEditNode(node: SchemaNodeResponse) {
   editReferenceComponentId.value = ''
   editReferenceVersionId.value = node.componentReference?.componentVersionId ?? ''
   referenceVersions.value = []
+  editLocalDefinitionRef.value = node.localDefinitionRef ?? ''
   editError.value = null
   void ensureComponentsLoaded()
 }
@@ -214,6 +220,11 @@ async function handleSaveNode() {
   if (!editingNode.value) return
   const node = editingNode.value
   editError.value = null
+  if (!versionETag.value) {
+    editError.value = 'Missing version ETag - reloading before saving.'
+    await load()
+    return
+  }
   isSavingNode.value = true
   try {
     const request: UpdateSchemaNodeRequest = {
@@ -232,7 +243,7 @@ async function handleSaveNode() {
       componentReference: editReferenceVersionId.value
         ? { componentVersionId: editReferenceVersionId.value, constraint: { kind: 'Latest', version: null } }
         : null,
-      localDefinitionRef: node.localDefinitionRef,
+      localDefinitionRef: editLocalDefinitionRef.value || null,
       objectConstraints:
         node.kind === 'Object'
           ? {
@@ -267,11 +278,16 @@ async function handleSaveNode() {
           : null,
     }
 
-    await schemaVersionsApi.updateNode(versionId.value, node.id, request)
+    await schemaVersionsApi.updateNode(versionId.value, node.id, request, versionETag.value)
     editingNode.value = null
     await load()
   } catch (error) {
-    editError.value = error instanceof ApiError ? error.message : 'Could not save node.'
+    if (error instanceof ApiError && error.status === 409) {
+      editError.value = 'This version changed elsewhere. Reloaded the latest version - please redo your edit.'
+      await load()
+    } else {
+      editError.value = error instanceof ApiError ? error.message : 'Could not save node.'
+    }
   } finally {
     isSavingNode.value = false
   }
@@ -280,17 +296,28 @@ async function handleSaveNode() {
 // --- Remove / move ---
 async function handleRemoveNode(node: SchemaNodeResponse) {
   actionError.value = null
+  if (!versionETag.value) {
+    actionError.value = 'Missing version ETag - reloading before removing.'
+    await load()
+    return
+  }
   try {
-    await schemaVersionsApi.removeNode(versionId.value, node.id)
+    await schemaVersionsApi.removeNode(versionId.value, node.id, versionETag.value)
     await load()
   } catch (error) {
-    actionError.value = error instanceof ApiError ? error.message : 'Could not remove node.'
+    if (error instanceof ApiError && error.status === 409) {
+      actionError.value = 'This version changed elsewhere. Reloaded the latest version - please retry.'
+      await load()
+    } else {
+      actionError.value = error instanceof ApiError ? error.message : 'Could not remove node.'
+    }
   }
 }
 
 // MoveNode sets a node's Order to exactly the value it's given - it doesn't renumber siblings
-// (Step 6 §2.4's "reorder, not reparent" scope). A true swap needs both nodes' orders exchanged
-// via two sequential calls, or repeated moves would eventually collide on duplicate order values.
+// (openReparentNode/handleReparentNode below is the move-to-a-different-parent counterpart). A
+// true swap needs both nodes' orders exchanged via two sequential calls, or repeated moves would
+// eventually collide on duplicate order values.
 async function handleMoveNode(node: SchemaNodeResponse, direction: 'up' | 'down', siblings: SchemaNodeResponse[]) {
   const sorted = [...siblings].sort((a, b) => a.order - b.order)
   const index = sorted.findIndex((n) => n.id === node.id)
@@ -300,11 +327,147 @@ async function handleMoveNode(node: SchemaNodeResponse, direction: 'up' | 'down'
 
   actionError.value = null
   try {
-    await schemaVersionsApi.moveNode(versionId.value, node.id, { newOrder: partner.order })
-    await schemaVersionsApi.moveNode(versionId.value, partner.id, { newOrder: node.order })
+    await schemaVersionsApi.moveNode(versionId.value, node.id, {
+      newOrder: partner.order,
+      newParentNodeId: null,
+      attachmentKind: null,
+      propertyName: null,
+    })
+    await schemaVersionsApi.moveNode(versionId.value, partner.id, {
+      newOrder: node.order,
+      newParentNodeId: null,
+      attachmentKind: null,
+      propertyName: null,
+    })
     await load()
   } catch (error) {
     actionError.value = error instanceof ApiError ? error.message : 'Could not move node.'
+  }
+}
+
+// --- Reparent (move to a different parent node) ---
+interface NodeOption {
+  id: string
+  label: string
+}
+
+// Depth-first path label for every node in the tree, so the "new parent" picker reads like
+// "customer.address" rather than a bare, meaningless id.
+function flattenNodeOptions(node: SchemaNodeResponse, path: string, into: NodeOption[]) {
+  into.push({ id: node.id, label: path })
+  for (const child of [...node.properties].sort((a, b) => a.order - b.order)) {
+    flattenNodeOptions(child, `${path}.${child.propertyName}`, into)
+  }
+  for (const [i, child] of [...node.prefixItems].sort((a, b) => a.order - b.order).entries()) {
+    flattenNodeOptions(child, `${path}[${i}]`, into)
+  }
+  if (node.itemsNode) flattenNodeOptions(node.itemsNode, `${path}[]`, into)
+  for (const [i, child] of [...node.compositionBranches].sort((a, b) => a.order - b.order).entries()) {
+    flattenNodeOptions(child, `${path}(branch ${i})`, into)
+  }
+  if (node.ifNode) flattenNodeOptions(node.ifNode, `${path}(if)`, into)
+  if (node.thenNode) flattenNodeOptions(node.thenNode, `${path}(then)`, into)
+  if (node.elseNode) flattenNodeOptions(node.elseNode, `${path}(else)`, into)
+}
+
+function collectNodeAndDescendantIds(node: SchemaNodeResponse, into: Set<string>) {
+  into.add(node.id)
+  for (const child of node.properties) collectNodeAndDescendantIds(child, into)
+  for (const child of node.prefixItems) collectNodeAndDescendantIds(child, into)
+  if (node.itemsNode) collectNodeAndDescendantIds(node.itemsNode, into)
+  for (const child of node.compositionBranches) collectNodeAndDescendantIds(child, into)
+  if (node.ifNode) collectNodeAndDescendantIds(node.ifNode, into)
+  if (node.thenNode) collectNodeAndDescendantIds(node.thenNode, into)
+  if (node.elseNode) collectNodeAndDescendantIds(node.elseNode, into)
+}
+
+const reparentingNode = ref<SchemaNodeResponse | null>(null)
+const reparentTargetParentId = ref('')
+const reparentAttachmentKind = ref<NodeAttachmentKind>('ObjectProperty')
+const reparentPropertyName = ref('')
+const reparentError = ref<string | null>(null)
+const isReparenting = ref(false)
+
+// Excludes the node itself and its own descendants - moving it under one of them would detach
+// the very subtree the prospective new parent lives in (the backend rejects this too, but
+// filtering it out of the picker means the user never sees it as an option in the first place).
+const reparentCandidates = computed<NodeOption[]>(() => {
+  if (!version.value || !reparentingNode.value) return []
+  const excluded = new Set<string>()
+  collectNodeAndDescendantIds(reparentingNode.value, excluded)
+  const options: NodeOption[] = []
+  flattenNodeOptions(version.value.rootNode, '(root)', options)
+  return options.filter((o) => !excluded.has(o.id))
+})
+
+function openReparentNode(node: SchemaNodeResponse) {
+  reparentingNode.value = node
+  reparentTargetParentId.value = ''
+  reparentAttachmentKind.value = 'ObjectProperty'
+  reparentPropertyName.value = node.propertyName ?? ''
+  reparentError.value = null
+}
+
+async function handleReparentNode() {
+  if (!reparentingNode.value || !reparentTargetParentId.value) return
+  reparentError.value = null
+  isReparenting.value = true
+  try {
+    await schemaVersionsApi.moveNode(versionId.value, reparentingNode.value.id, {
+      newOrder: 0,
+      newParentNodeId: reparentTargetParentId.value,
+      attachmentKind: reparentAttachmentKind.value,
+      propertyName: reparentAttachmentKind.value === 'ObjectProperty' ? reparentPropertyName.value : null,
+    })
+    reparentingNode.value = null
+    await load()
+  } catch (error) {
+    reparentError.value = error instanceof ApiError ? error.message : 'Could not move node.'
+  } finally {
+    isReparenting.value = false
+  }
+}
+
+// --- Local definitions (within-version reuse for recursive schemas) ---
+const newLocalDefinitionName = ref('')
+const newLocalDefinitionRootKind = ref<NodeKind>('Object')
+const localDefinitionError = ref<string | null>(null)
+const isCreatingLocalDefinition = ref(false)
+
+async function handleCreateLocalDefinition() {
+  localDefinitionError.value = null
+  isCreatingLocalDefinition.value = true
+  try {
+    await schemaVersionsApi.addLocalDefinition(versionId.value, {
+      name: newLocalDefinitionName.value,
+      rootKind: newLocalDefinitionRootKind.value,
+    })
+    newLocalDefinitionName.value = ''
+    await load()
+  } catch (error) {
+    localDefinitionError.value = error instanceof ApiError ? error.message : 'Could not create local definition.'
+  } finally {
+    isCreatingLocalDefinition.value = false
+  }
+}
+
+async function handleRemoveLocalDefinition(localDefinitionId: string) {
+  localDefinitionError.value = null
+  if (!versionETag.value) {
+    localDefinitionError.value = 'Missing version ETag - reloading before removing.'
+    await load()
+    return
+  }
+  try {
+    await schemaVersionsApi.removeLocalDefinition(versionId.value, localDefinitionId, versionETag.value)
+    await load()
+  } catch (error) {
+    if (error instanceof ApiError && error.status === 409) {
+      localDefinitionError.value = 'This version changed elsewhere. Reloaded the latest version - please retry.'
+      await load()
+    } else {
+      localDefinitionError.value = error instanceof ApiError ? error.message : 'Could not remove local definition.'
+    }
   }
 }
 
@@ -481,7 +644,75 @@ onMounted(async () => {
           @edit-node="openEditNode"
           @remove-node="handleRemoveNode"
           @move-node="handleMoveNode"
+          @reparent-node="openReparentNode"
         />
+      </div>
+
+      <div class="mt-6 rounded-lg border border-slate-200 bg-white p-6">
+        <h2 class="text-base font-semibold text-slate-900">Local Definitions</h2>
+        <p class="mt-1 text-sm text-slate-500">
+          Reusable node subtrees within this version - reference one from a node's edit form to reuse it recursively.
+        </p>
+
+        <form
+          v-if="isEditable"
+          class="mt-4 flex flex-wrap items-end gap-2 border-b border-slate-100 pb-4"
+          @submit.prevent="handleCreateLocalDefinition"
+        >
+          <div class="flex-1">
+            <label for="new-local-definition-name" class="block text-xs font-medium text-slate-500">Name</label>
+            <input
+              id="new-local-definition-name"
+              v-model="newLocalDefinitionName"
+              type="text"
+              required
+              class="mt-1 w-full rounded-md border border-slate-300 px-2 py-1.5 text-sm focus:border-slate-500 focus:outline-none"
+            />
+          </div>
+          <div>
+            <label for="new-local-definition-kind" class="block text-xs font-medium text-slate-500">Root kind</label>
+            <select
+              id="new-local-definition-kind"
+              v-model="newLocalDefinitionRootKind"
+              class="mt-1 rounded-md border border-slate-300 px-2 py-1.5 text-sm focus:border-slate-500 focus:outline-none"
+            >
+              <option v-for="kind in ADDABLE_KINDS" :key="kind" :value="kind">{{ kind }}</option>
+            </select>
+          </div>
+          <button
+            type="submit"
+            :disabled="isCreatingLocalDefinition"
+            class="rounded-md bg-slate-900 px-3 py-1.5 text-sm font-medium text-white hover:bg-slate-800 disabled:opacity-50"
+          >
+            {{ isCreatingLocalDefinition ? 'Creating…' : 'New Definition' }}
+          </button>
+        </form>
+
+        <p v-if="localDefinitionError" class="mt-2 text-sm text-red-600">{{ localDefinitionError }}</p>
+        <p v-if="version.localDefinitions.length === 0" class="mt-4 text-sm text-slate-500">No local definitions yet.</p>
+
+        <ul v-else class="mt-4 space-y-2">
+          <li
+            v-for="definition in version.localDefinitions"
+            :key="definition.id"
+            class="flex items-center justify-between rounded-md border border-slate-100 px-3 py-2"
+          >
+            <div>
+              <span class="font-mono text-sm font-medium text-slate-900">{{ definition.name }}</span>
+              <span class="ml-2 rounded bg-slate-100 px-1.5 py-0.5 text-xs text-slate-600">
+                {{ definition.rootNode.kind ?? 'Unspecified' }}
+              </span>
+            </div>
+            <button
+              v-if="isEditable"
+              type="button"
+              class="text-slate-400 hover:text-red-600"
+              @click="handleRemoveLocalDefinition(definition.id)"
+            >
+              Remove
+            </button>
+          </li>
+        </ul>
       </div>
 
       <div class="mt-6 rounded-lg border border-slate-200 bg-white p-6">
@@ -777,6 +1008,20 @@ onMounted(async () => {
           </button>
         </div>
 
+        <div>
+          <label for="edit-local-definition-ref" class="block text-sm font-medium text-slate-700">
+            Local Definition Reference <span class="text-slate-400">(optional)</span>
+          </label>
+          <select
+            id="edit-local-definition-ref"
+            v-model="editLocalDefinitionRef"
+            class="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm focus:border-slate-500 focus:outline-none"
+          >
+            <option value="">None</option>
+            <option v-for="d in version?.localDefinitions ?? []" :key="d.id" :value="d.id">{{ d.name }}</option>
+          </select>
+        </div>
+
         <template v-if="editingNode.kind === 'String'">
           <div class="grid grid-cols-2 gap-3">
             <div>
@@ -934,6 +1179,55 @@ onMounted(async () => {
           class="w-full rounded-md bg-slate-900 px-3 py-2 text-sm font-medium text-white hover:bg-slate-800 disabled:opacity-50"
         >
           {{ isSavingNode ? 'Saving…' : 'Save' }}
+        </button>
+      </form>
+    </Modal>
+
+    <Modal
+      v-if="reparentingNode"
+      :title="`Move ${reparentingNode.propertyName ?? '(unnamed)'} to…`"
+      @close="reparentingNode = null"
+    >
+      <form class="space-y-4" @submit.prevent="handleReparentNode">
+        <div>
+          <label for="reparent-target" class="block text-sm font-medium text-slate-700">New parent</label>
+          <select
+            id="reparent-target"
+            v-model="reparentTargetParentId"
+            required
+            class="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 font-mono text-sm focus:border-slate-500 focus:outline-none"
+          >
+            <option value="" disabled>Select a node…</option>
+            <option v-for="option in reparentCandidates" :key="option.id" :value="option.id">{{ option.label }}</option>
+          </select>
+        </div>
+        <div>
+          <label for="reparent-kind" class="block text-sm font-medium text-slate-700">Attach as</label>
+          <select
+            id="reparent-kind"
+            v-model="reparentAttachmentKind"
+            class="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm focus:border-slate-500 focus:outline-none"
+          >
+            <option v-for="(label, kind) in ATTACHMENT_LABELS" :key="kind" :value="kind">{{ label }}</option>
+          </select>
+        </div>
+        <div v-if="reparentAttachmentKind === 'ObjectProperty'">
+          <label for="reparent-property-name" class="block text-sm font-medium text-slate-700">Property name</label>
+          <input
+            id="reparent-property-name"
+            v-model="reparentPropertyName"
+            type="text"
+            required
+            class="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm focus:border-slate-500 focus:outline-none"
+          />
+        </div>
+        <p v-if="reparentError" class="text-sm text-red-600">{{ reparentError }}</p>
+        <button
+          type="submit"
+          :disabled="isReparenting || !reparentTargetParentId"
+          class="w-full rounded-md bg-slate-900 px-3 py-2 text-sm font-medium text-white hover:bg-slate-800 disabled:opacity-50"
+        >
+          {{ isReparenting ? 'Moving…' : 'Move' }}
         </button>
       </form>
     </Modal>

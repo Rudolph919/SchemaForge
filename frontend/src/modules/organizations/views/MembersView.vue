@@ -2,6 +2,7 @@
 import { onMounted, ref } from 'vue'
 import { organizationsApi } from '@/modules/organizations/api/organizationsApi'
 import { ApiError } from '@/shared/api/httpClient'
+import { useIdempotencyKey } from '@/shared/api/idempotencyKey'
 import Modal from '@/shared/components/Modal.vue'
 import type { OrganizationMemberResponse, OrganizationRole } from '@/types/organizations'
 
@@ -17,6 +18,7 @@ const inviteEmail = ref('')
 const inviteRole = ref<OrganizationRole>('Member')
 const inviteError = ref<string | null>(null)
 const isSubmitting = ref(false)
+const inviteMemberKey = useIdempotencyKey()
 
 async function loadMembers() {
   isLoading.value = true
@@ -34,6 +36,7 @@ function openInvite() {
   inviteEmail.value = ''
   inviteRole.value = 'Member'
   inviteError.value = null
+  inviteMemberKey.reset()
   isInviteOpen.value = true
 }
 
@@ -41,7 +44,8 @@ async function handleInvite() {
   inviteError.value = null
   isSubmitting.value = true
   try {
-    await organizationsApi.inviteMember({ email: inviteEmail.value, role: inviteRole.value })
+    await organizationsApi.inviteMember({ email: inviteEmail.value, role: inviteRole.value }, inviteMemberKey.get())
+    inviteMemberKey.reset()
     isInviteOpen.value = false
     await loadMembers()
   } catch (error) {

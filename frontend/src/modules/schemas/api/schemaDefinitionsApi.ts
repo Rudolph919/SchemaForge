@@ -12,11 +12,11 @@ export const schemaDefinitionsApi = {
     httpClient.get<SchemaDefinitionSummaryResponse[]>(`/api/v1/projects/${projectId}/schemas`),
 
   getSchema: (schemaDefinitionId: string) =>
-    httpClient.get<SchemaDefinitionDetailResponse>(`/api/v1/schemas/${schemaDefinitionId}`),
+    httpClient.getWithETag<SchemaDefinitionDetailResponse>(`/api/v1/schemas/${schemaDefinitionId}`),
 
-  createSchema: (projectId: string, request: CreateSchemaDefinitionRequest) =>
-    httpClient.post<CreateSchemaDefinitionResponse>(`/api/v1/projects/${projectId}/schemas`, request),
+  createSchema: (projectId: string, request: CreateSchemaDefinitionRequest, idempotencyKey: string) =>
+    httpClient.post<CreateSchemaDefinitionResponse>(`/api/v1/projects/${projectId}/schemas`, request, idempotencyKey),
 
-  updateSchemaDetails: (schemaDefinitionId: string, request: UpdateSchemaDefinitionDetailsRequest) =>
-    httpClient.patch<void>(`/api/v1/schemas/${schemaDefinitionId}`, request),
+  updateSchemaDetails: (schemaDefinitionId: string, request: UpdateSchemaDefinitionDetailsRequest, ifMatch: string) =>
+    httpClient.patch<void>(`/api/v1/schemas/${schemaDefinitionId}`, request, ifMatch),
 }

@@ -4,6 +4,7 @@ import { useRoute, useRouter } from 'vue-router'
 import { componentsApi } from '@/modules/components-library/api/componentsApi'
 import { componentVersionsApi } from '@/modules/components-library/api/componentVersionsApi'
 import { ApiError } from '@/shared/api/httpClient'
+import { useIdempotencyKey, useIdempotencyKeyMap } from '@/shared/api/idempotencyKey'
 import type {
   ComponentDefinitionDetailResponse,
   ComponentVersionSummaryResponse,
@@ -28,6 +29,9 @@ const newVersionBumpKind = ref<VersionBumpKind>('Minor')
 const newVersionSummary = ref('')
 const versionError = ref<string | null>(null)
 const isCreatingVersion = ref(false)
+const createVersionKey = useIdempotencyKey()
+const publishKeys = useIdempotencyKeyMap()
+const deprecateKeys = useIdempotencyKeyMap()
 
 const hasDraft = computed(() => versions.value.some((v) => v.status === 'Draft'))
 
@@ -74,10 +78,12 @@ async function handleCreateVersion() {
   versionError.value = null
   isCreatingVersion.value = true
   try {
-    await componentVersionsApi.createVersion(componentId.value, {
-      bumpKind: newVersionBumpKind.value,
-      changeSummary: newVersionSummary.value || null,
-    })
+    await componentVersionsApi.createVersion(
+      componentId.value,
+      { bumpKind: newVersionBumpKind.value, changeSummary: newVersionSummary.value || null },
+      createVersionKey.get(),
+    )
+    createVersionKey.reset()
     newVersionSummary.value = ''
     await load()
   } catch (error) {
@@ -90,7 +96,8 @@ async function handleCreateVersion() {
 async function handlePublish(versionId: string) {
   versionError.value = null
   try {
-    await componentVersionsApi.publish(versionId)
+    await componentVersionsApi.publish(versionId, publishKeys.get(versionId))
+    publishKeys.reset(versionId)
     await load()
   } catch (error) {
     versionError.value = error instanceof ApiError ? error.message : 'Could not publish version.'
@@ -100,7 +107,8 @@ async function handlePublish(versionId: string) {
 async function handleDeprecate(versionId: string) {
   versionError.value = null
   try {
-    await componentVersionsApi.deprecate(versionId)
+    await componentVersionsApi.deprecate(versionId, deprecateKeys.get(versionId))
+    deprecateKeys.reset(versionId)
     await load()
   } catch (error) {
     versionError.value = error instanceof ApiError ? error.message : 'Could not deprecate version.'

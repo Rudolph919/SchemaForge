@@ -4,12 +4,15 @@ using Microsoft.AspNetCore.Mvc;
 using SchemaForge.Api.Common;
 using SchemaForge.Api.Mapping;
 using SchemaForge.Api.Middleware;
+using SchemaForge.Application.Components.Commands.AddComponentLocalDefinition;
 using SchemaForge.Application.Components.Commands.AddComponentNode;
 using SchemaForge.Application.Components.Commands.CreateComponentVersion;
 using SchemaForge.Application.Components.Commands.DeprecateComponentVersion;
 using SchemaForge.Application.Components.Commands.MoveComponentNode;
 using SchemaForge.Application.Components.Commands.PublishComponentVersion;
+using SchemaForge.Application.Components.Commands.RemoveComponentLocalDefinition;
 using SchemaForge.Application.Components.Commands.RemoveComponentNode;
+using SchemaForge.Application.Components.Commands.ReparentComponentNode;
 using SchemaForge.Application.Components.Commands.UpdateComponentNode;
 using SchemaForge.Application.Components.Queries.GetComponentVersion;
 using SchemaForge.Application.Components.Queries.ListComponentVersions;
@@ -89,10 +92,40 @@ public sealed class ComponentVersionsController(ISender sender) : ControllerBase
         return result.ToActionResult();
     }
 
+    [HttpPost("api/v1/component-versions/{componentVersionId:guid}/local-definitions")]
+    public async Task<IActionResult> AddLocalDefinition(
+        Guid componentVersionId, AddLocalDefinitionRequest request, CancellationToken cancellationToken)
+    {
+        var result = await sender.Send(request.ToAddComponentLocalDefinitionCommand(componentVersionId), cancellationToken);
+        return result.ToActionResult(r => r.ToResponse());
+    }
+
+    [HttpDelete("api/v1/component-versions/{componentVersionId:guid}/local-definitions/{localDefinitionId:guid}")]
+    public async Task<IActionResult> RemoveLocalDefinition(
+        Guid componentVersionId, Guid localDefinitionId, CancellationToken cancellationToken)
+    {
+        if (!Request.TryGetIfMatch(out var expectedVersion))
+        {
+            return ConcurrencyExtensions.PreconditionRequired();
+        }
+
+        var result = await sender.Send(
+            new RemoveComponentLocalDefinitionCommand(componentVersionId, localDefinitionId, expectedVersion),
+            cancellationToken);
+        return result.ToActionResult();
+    }
+
     [HttpPost("api/v1/component-versions/{componentVersionId:guid}/nodes/{nodeId:guid}/move")]
     public async Task<IActionResult> MoveNode(
         Guid componentVersionId, Guid nodeId, MoveSchemaNodeRequest request, CancellationToken cancellationToken)
     {
+        if (request.NewParentNodeId is { } newParentNodeId)
+        {
+            var reparentResult = await sender.Send(
+                request.ToReparentComponentNodeCommand(componentVersionId, nodeId, newParentNodeId), cancellationToken);
+            return reparentResult.ToActionResult();
+        }
+
         var result = await sender.Send(request.ToMoveComponentNodeCommand(componentVersionId, nodeId), cancellationToken);
         return result.ToActionResult();
     }

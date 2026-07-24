@@ -4,6 +4,7 @@ import { useRoute, useRouter } from 'vue-router'
 import { schemaVersionsApi } from '@/modules/schemas/api/schemaVersionsApi'
 import { testSuitesApi } from '@/modules/testing/api/testSuitesApi'
 import { ApiError } from '@/shared/api/httpClient'
+import { useIdempotencyKeyMap } from '@/shared/api/idempotencyKey'
 import Modal from '@/shared/components/Modal.vue'
 import type { SchemaVersionSummaryResponse } from '@/types/schemas'
 import type {
@@ -19,6 +20,7 @@ const router = useRouter()
 const testSuiteId = computed(() => route.params.testSuiteId as string)
 
 const suite = ref<TestSuiteDetailResponse | null>(null)
+const suiteETag = ref<string | null>(null)
 const versions = ref<SchemaVersionSummaryResponse[]>([])
 const loadError = ref<string | null>(null)
 const actionError = ref<string | null>(null)
@@ -26,7 +28,9 @@ const actionError = ref<string | null>(null)
 async function load() {
   loadError.value = null
   try {
-    suite.value = await testSuitesApi.getSuite(testSuiteId.value)
+    const { data, etag } = await testSuitesApi.getSuite(testSuiteId.value)
+    suite.value = data
+    suiteETag.value = etag
     versions.value = await schemaVersionsApi.listVersions(suite.value.schemaDefinitionId)
   } catch (error) {
     loadError.value = error instanceof ApiError ? error.message : 'Could not load test suite.'
@@ -50,16 +54,27 @@ function startEditing() {
 
 async function handleSaveDetails() {
   editDetailsError.value = null
+  if (!suiteETag.value) {
+    editDetailsError.value = 'Missing test suite ETag - reloading before saving.'
+    await load()
+    return
+  }
   isSavingDetails.value = true
   try {
-    await testSuitesApi.updateSuiteDetails(testSuiteId.value, {
-      name: editName.value,
-      description: editDescription.value || null,
-    })
+    await testSuitesApi.updateSuiteDetails(
+      testSuiteId.value,
+      { name: editName.value, description: editDescription.value || null },
+      suiteETag.value,
+    )
     isEditing.value = false
     await load()
   } catch (error) {
-    editDetailsError.value = error instanceof ApiError ? error.message : 'Could not save changes.'
+    if (error instanceof ApiError && error.status === 409) {
+      editDetailsError.value = 'This test suite changed elsewhere. Reloaded the latest version - please redo your edit.'
+      await load()
+    } else {
+      editDetailsError.value = error instanceof ApiError ? error.message : 'Could not save changes.'
+    }
   } finally {
     isSavingDetails.value = false
   }
@@ -154,6 +169,10 @@ const runTargetVersionId = ref('')
 const isRunning = ref(false)
 const runError = ref<string | null>(null)
 const currentRun = ref<TestRunResponse | null>(null)
+// Keyed by target version, not a single shared key - running against a different version is a
+// genuinely new action, while retrying against the same version after a failure should replay
+// rather than duplicate the run.
+const runKeys = useIdempotencyKeyMap()
 
 async function handleRun() {
   if (!runTargetVersionId.value) return
@@ -161,7 +180,8 @@ async function handleRun() {
   currentRun.value = null
   isRunning.value = true
   try {
-    const { testRunId } = await testSuitesApi.run(testSuiteId.value, runTargetVersionId.value)
+    const { testRunId } = await testSuitesApi.run(testSuiteId.value, runTargetVersionId.value, runKeys.get(runTargetVersionId.value))
+    runKeys.reset(runTargetVersionId.value)
     await pollRun(testRunId)
   } catch (error) {
     runError.value = error instanceof ApiError ? error.message : 'Could not start test run.'

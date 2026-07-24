@@ -13,7 +13,8 @@ export const teamsApi = {
 
   getTeam: (teamId: string) => httpClient.get<TeamDetailResponse>(`/api/v1/teams/${teamId}`),
 
-  createTeam: (request: CreateTeamRequest) => httpClient.post<CreateTeamResponse>('/api/v1/teams', request),
+  createTeam: (request: CreateTeamRequest, idempotencyKey: string) =>
+    httpClient.post<CreateTeamResponse>('/api/v1/teams', request, idempotencyKey),
 
   updateTeamDetails: (teamId: string, request: UpdateTeamDetailsRequest) =>
     httpClient.put<void>(`/api/v1/teams/${teamId}`, request),

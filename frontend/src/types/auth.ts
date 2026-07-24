@@ -21,6 +21,7 @@ export interface LoginRequest {
 
 export interface LoginResponse {
   accessToken: string
+  refreshToken: string
   userId: string
   organizationId: string
   displayName: string
@@ -32,6 +33,19 @@ export interface SwitchOrganizationRequest {
 
 export interface SwitchOrganizationResponse {
   accessToken: string
+  refreshToken: string
+  organizationId: string
+  displayName: string
+}
+
+export interface RefreshTokenRequest {
+  refreshToken: string
+}
+
+export interface RefreshTokenResponse {
+  accessToken: string
+  refreshToken: string
+  userId: string
   organizationId: string
   displayName: string
 }

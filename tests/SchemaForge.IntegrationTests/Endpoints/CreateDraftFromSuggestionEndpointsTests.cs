@@ -64,6 +64,48 @@ public sealed class CreateDraftFromSuggestionEndpointsTests : IAsyncLifetime
         detail.RootNode.Properties.Should().NotContain(p => p.PropertyName == "internalNotes");
     }
 
+    // Regression test for a bug where AddAcceptedSubtree unconditionally attached every accepted
+    // node via AddObjectProperty - correct for an Object parent, but AddObjectProperty rejects a
+    // non-Object parent outright (SchemaNode.NotAnObject), so any suggestion proposing an Array
+    // with a nested item schema (exactly what a real provider would return for e.g. "items":
+    // [...]) failed the whole request, even with every node accepted.
+    [Fact]
+    public async Task Accepting_a_suggested_array_with_a_nested_item_schema_materializes_the_items_node()
+    {
+        var token = await RegisterAndLoginAsync("Org A");
+        var schemaDefinitionId = await CreateSchemaDefinitionAsync(token, "Order Schema");
+
+        var itemsId = Guid.NewGuid();
+        var itemsObjectId = Guid.NewGuid();
+        var skuId = Guid.NewGuid();
+
+        var suggestion = new SchemaSuggestionResponse(
+            "hand-crafted-test-provider",
+            0.8m,
+            [
+                new SuggestedNodeResponse(itemsId, "items", NodeKind.Array, "Line items in the order", 0.8m,
+                    [
+                        new SuggestedNodeResponse(itemsObjectId, null, NodeKind.Object, "A single line item", 0.75m,
+                            [new SuggestedNodeResponse(skuId, "sku", NodeKind.String, "Item SKU", 0.85m, [])]),
+                    ]),
+            ]);
+
+        var request = new CreateDraftFromSuggestionRequest(
+            suggestion, [itemsId, itemsObjectId, skuId], VersionBumpKind.Minor, "from AI suggestion");
+        var response = await SendAsync(HttpMethod.Post, $"/api/v1/schemas/{schemaDefinitionId}/versions/from-suggestion", token, request);
+        response.StatusCode.Should().Be(HttpStatusCode.OK);
+
+        var result = await response.Content.ReadFromJsonAsync<CreateDraftFromSuggestionResponse>(TestJson.Options);
+        result!.AcceptedCount.Should().Be(3);
+
+        var detail = await GetVersionAsync(result.SchemaVersionId, token);
+        var items = detail.RootNode.Properties.Should().ContainSingle(p => p.PropertyName == "items").Subject;
+        items.Kind.Should().Be(NodeKind.Array);
+        items.ItemsNode.Should().NotBeNull();
+        items.ItemsNode!.Kind.Should().Be(NodeKind.Object);
+        items.ItemsNode.Properties.Should().ContainSingle(p => p.PropertyName == "sku" && p.Description == "Item SKU");
+    }
+
     [Fact]
     public async Task A_draft_from_suggestion_cannot_be_created_while_one_already_exists()
     {

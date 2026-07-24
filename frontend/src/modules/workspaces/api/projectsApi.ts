@@ -10,13 +10,13 @@ import type {
 export const projectsApi = {
   listProjects: () => httpClient.get<ProjectSummaryResponse[]>('/api/v1/projects'),
 
-  getProject: (projectId: string) => httpClient.get<ProjectDetailResponse>(`/api/v1/projects/${projectId}`),
+  getProject: (projectId: string) => httpClient.getWithETag<ProjectDetailResponse>(`/api/v1/projects/${projectId}`),
 
-  createProject: (request: CreateProjectRequest) =>
-    httpClient.post<CreateProjectResponse>('/api/v1/projects', request),
+  createProject: (request: CreateProjectRequest, idempotencyKey: string) =>
+    httpClient.post<CreateProjectResponse>('/api/v1/projects', request, idempotencyKey),
 
-  updateProjectDetails: (projectId: string, request: UpdateProjectDetailsRequest) =>
-    httpClient.put<void>(`/api/v1/projects/${projectId}`, request),
+  updateProjectDetails: (projectId: string, request: UpdateProjectDetailsRequest, ifMatch: string) =>
+    httpClient.put<void>(`/api/v1/projects/${projectId}`, request, ifMatch),
 
   archiveProject: (projectId: string) => httpClient.post<void>(`/api/v1/projects/${projectId}/archive`),
 

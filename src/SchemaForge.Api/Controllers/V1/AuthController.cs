@@ -28,8 +28,31 @@ public sealed class AuthController(ISender sender) : ControllerBase
     [EnableRateLimiting(ApiServiceCollectionExtensions.AuthRateLimitPolicy)]
     public async Task<IActionResult> Login(LoginRequest request, CancellationToken cancellationToken)
     {
-        var result = await sender.Send(request.ToQuery(), cancellationToken);
+        var result = await sender.Send(request.ToCommand(), cancellationToken);
         return result.ToActionResult(r => r.ToResponse());
+    }
+
+    // Anonymous like Login itself - a caller with an expired/missing access token has nothing
+    // else to authenticate with, so possessing the raw refresh token (validated purely by its
+    // hash matching an active, unrevoked row) is the credential here. Rate-limited the same as
+    // login/register since it's an equally attractive target to hammer.
+    [HttpPost("refresh")]
+    [EnableRateLimiting(ApiServiceCollectionExtensions.AuthRateLimitPolicy)]
+    public async Task<IActionResult> Refresh(RefreshTokenRequest request, CancellationToken cancellationToken)
+    {
+        var result = await sender.Send(request.ToCommand(), cancellationToken);
+        return result.ToActionResult(r => r.ToResponse());
+    }
+
+    // Revokes the given refresh token so it can't be used to mint another access token - always
+    // reports success (see LogoutHandler) regardless of whether the token was found, since the
+    // caller's goal is already achieved either way.
+    [HttpPost("logout")]
+    [EnableRateLimiting(ApiServiceCollectionExtensions.AuthRateLimitPolicy)]
+    public async Task<IActionResult> Logout(RefreshTokenRequest request, CancellationToken cancellationToken)
+    {
+        var result = await sender.Send(request.ToLogoutCommand(), cancellationToken);
+        return result.ToActionResult();
     }
 
     // Issues a fresh token scoped to a different organization the caller is an active member of
@@ -41,7 +64,7 @@ public sealed class AuthController(ISender sender) : ControllerBase
     public async Task<IActionResult> SwitchOrganization(
         SwitchOrganizationRequest request, CancellationToken cancellationToken)
     {
-        var result = await sender.Send(request.ToQuery(), cancellationToken);
+        var result = await sender.Send(request.ToCommand(), cancellationToken);
         return result.ToActionResult(r => r.ToResponse());
     }
 }

@@ -2,6 +2,8 @@ import { httpClient } from '@/shared/api/httpClient'
 import type {
   LoginRequest,
   LoginResponse,
+  RefreshTokenRequest,
+  RefreshTokenResponse,
   RegisterRequest,
   RegisterResponse,
   SwitchOrganizationRequest,
@@ -16,4 +18,9 @@ export const authApi = {
 
   switchOrganization: (request: SwitchOrganizationRequest) =>
     httpClient.post<SwitchOrganizationResponse>('/api/v1/auth/switch-organization', request),
+
+  refresh: (request: RefreshTokenRequest) =>
+    httpClient.post<RefreshTokenResponse>('/api/v1/auth/refresh', request),
+
+  logout: (request: RefreshTokenRequest) => httpClient.post<void>('/api/v1/auth/logout', request),
 }

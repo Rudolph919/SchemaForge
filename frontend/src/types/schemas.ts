@@ -150,6 +150,15 @@ export interface LocalDefinitionResponse {
   rootNode: SchemaNodeResponse
 }
 
+export interface AddLocalDefinitionRequest {
+  name: string
+  rootKind: NodeKind | null
+}
+
+export interface AddLocalDefinitionResponse {
+  localDefinitionId: string
+}
+
 export interface SchemaVersionDetailResponse {
   id: string
   schemaDefinitionId: string
@@ -192,8 +201,14 @@ export interface UpdateSchemaNodeRequest {
   localDefinitionRef: string | null
 }
 
+// newParentNodeId null: plain reorder (newOrder applies). Set alongside attachmentKind (and
+// propertyName, for ObjectProperty) to reparent to a different node instead - newOrder is
+// ignored in that case.
 export interface MoveSchemaNodeRequest {
   newOrder: number
+  newParentNodeId: string | null
+  attachmentKind: NodeAttachmentKind | null
+  propertyName: string | null
 }
 
 export interface SchemaDiffChangeResponse {

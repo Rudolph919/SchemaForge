@@ -142,10 +142,10 @@ internal static class NodeTreeOperations
         return Result.Success();
     }
 
-    // Reorder among existing siblings only - not reparenting to a different node. Reparenting
-    // would mean detaching from one attachment point and reattaching at another while preserving
-    // the node's id/content, a materially riskier operation than resequencing a list; scoped out
-    // until a real need for it shows up.
+    // Reorder among existing siblings only - MoveNode's counterpart for reparenting to a
+    // different node (a materially riskier operation: detaching from one attachment point and
+    // reattaching at another while preserving the node's id/content) is the ReparentAs* family
+    // below.
     public static Result MoveNode(SchemaNode rootNode, IReadOnlyList<LocalDefinition> localDefinitions, Guid nodeId, int newOrder)
     {
         if (nodeId == rootNode.Id)
@@ -163,6 +163,165 @@ internal static class NodeTreeOperations
 
         return Result.Success();
     }
+
+    // One method per attachment kind, mirroring AddObjectProperty/AddArrayPrefixItem/
+    // SetArrayItemsNode/AddCompositionBranch/SetConditionalNode above rather than a single method
+    // taking a kind discriminator - NodeAttachmentKind is an Application-layer vocabulary
+    // (Step 1 §2's layer rule keeps it out of Domain), so the Application handler's own switch
+    // picks which of these to call, exactly as it already does for the Add* family.
+    public static Result ReparentAsObjectProperty(
+        SchemaNode rootNode, IReadOnlyList<LocalDefinition> localDefinitions, Guid nodeId, Guid newParentNodeId, string propertyName)
+    {
+        if (string.IsNullOrWhiteSpace(propertyName))
+        {
+            return Result.Failure(Error.Validation("SchemaNode.PropertyNameRequired", "Property name is required."));
+        }
+
+        var (node, newParent, error) = ResolveReparentTargets(rootNode, localDefinitions, nodeId, newParentNodeId);
+        if (error is not null) return Result.Failure(error.Value);
+
+        if (newParent!.Kind != NodeKind.Object)
+        {
+            return Result.Failure(Error.Validation(
+                "SchemaNode.NotAnObject", "Properties can only be added to an object node."));
+        }
+
+        if (newParent.Properties.Any(p => p.Id != node!.Id && p.PropertyName == propertyName))
+        {
+            return Result.Failure(Error.Conflict(
+                "SchemaNode.DuplicatePropertyName", "A property with this name already exists on this node."));
+        }
+
+        var detached = DetachNode(rootNode, localDefinitions, nodeId)!;
+        detached.Rename(propertyName);
+        detached.Reorder(newParent.Properties.Count);
+        newParent.AddProperty(detached);
+
+        return Result.Success();
+    }
+
+    public static Result ReparentAsArrayPrefixItem(
+        SchemaNode rootNode, IReadOnlyList<LocalDefinition> localDefinitions, Guid nodeId, Guid newParentNodeId)
+    {
+        var (_, newParent, error) = ResolveReparentTargets(rootNode, localDefinitions, nodeId, newParentNodeId);
+        if (error is not null) return Result.Failure(error.Value);
+
+        if (newParent!.Kind != NodeKind.Array)
+        {
+            return Result.Failure(Error.Validation(
+                "SchemaNode.NotAnArray", "Prefix items can only be added to an array node."));
+        }
+
+        var detached = DetachNode(rootNode, localDefinitions, nodeId)!;
+        detached.Rename(null);
+        detached.Reorder(newParent.PrefixItems.Count);
+        newParent.AddPrefixItem(detached);
+
+        return Result.Success();
+    }
+
+    public static Result ReparentAsArrayItems(
+        SchemaNode rootNode, IReadOnlyList<LocalDefinition> localDefinitions, Guid nodeId, Guid newParentNodeId)
+    {
+        var (_, newParent, error) = ResolveReparentTargets(rootNode, localDefinitions, nodeId, newParentNodeId);
+        if (error is not null) return Result.Failure(error.Value);
+
+        if (newParent!.Kind != NodeKind.Array)
+        {
+            return Result.Failure(Error.Validation(
+                "SchemaNode.NotAnArray", "An items schema can only be set on an array node."));
+        }
+
+        var detached = DetachNode(rootNode, localDefinitions, nodeId)!;
+        detached.Rename(null);
+        newParent.SetItemsNode(detached);
+
+        return Result.Success();
+    }
+
+    public static Result ReparentAsCompositionBranch(
+        SchemaNode rootNode, IReadOnlyList<LocalDefinition> localDefinitions, Guid nodeId, Guid newParentNodeId)
+    {
+        var (_, newParent, error) = ResolveReparentTargets(rootNode, localDefinitions, nodeId, newParentNodeId);
+        if (error is not null) return Result.Failure(error.Value);
+
+        if (newParent!.Composition is null)
+        {
+            return Result.Failure(Error.Validation(
+                "SchemaNode.NoComposition",
+                "This node has no composition (oneOf/anyOf/allOf/not) set - set one before adding branches."));
+        }
+
+        var detached = DetachNode(rootNode, localDefinitions, nodeId)!;
+        detached.Rename(null);
+        detached.Reorder(newParent.CompositionBranches.Count);
+        newParent.AddCompositionBranch(detached);
+
+        return Result.Success();
+    }
+
+    public static Result ReparentAsConditionalNode(
+        SchemaNode rootNode, IReadOnlyList<LocalDefinition> localDefinitions, Guid nodeId, Guid newParentNodeId, ConditionalSlot slot)
+    {
+        var (_, newParent, error) = ResolveReparentTargets(rootNode, localDefinitions, nodeId, newParentNodeId);
+        if (error is not null) return Result.Failure(error.Value);
+
+        var detached = DetachNode(rootNode, localDefinitions, nodeId)!;
+        detached.Rename(null);
+        switch (slot)
+        {
+            case ConditionalSlot.If: newParent!.SetIfNode(detached); break;
+            case ConditionalSlot.Then: newParent!.SetThenNode(detached); break;
+            case ConditionalSlot.Else: newParent!.SetElseNode(detached); break;
+            default: throw new ArgumentOutOfRangeException(nameof(slot), slot, null);
+        }
+
+        return Result.Success();
+    }
+
+    // Shared cycle/existence checks for every ReparentAs* method above - a node can't be
+    // reparented under itself, under one of its own descendants (that would detach the very
+    // subtree the prospective new parent lives in, an unrepresentable cycle), or under a parent
+    // that doesn't exist. Returns the resolved node/new-parent pair on success so callers don't
+    // have to look them up a second time for their own kind-specific validation.
+    private static (SchemaNode? Node, SchemaNode? NewParent, Error? Error) ResolveReparentTargets(
+        SchemaNode rootNode, IReadOnlyList<LocalDefinition> localDefinitions, Guid nodeId, Guid newParentNodeId)
+    {
+        if (nodeId == rootNode.Id)
+        {
+            return (null, null, Error.Validation("SchemaNode.CannotMoveRoot", "The root node cannot be reparented."));
+        }
+
+        if (nodeId == newParentNodeId)
+        {
+            return (null, null, Error.Validation(
+                "SchemaNode.CannotReparentUnderItself", "A node cannot be moved under itself."));
+        }
+
+        var node = FindNode(rootNode, localDefinitions, nodeId);
+        if (node is null)
+        {
+            return (null, null, Error.NotFound("SchemaNode.NotFound", "No such node."));
+        }
+
+        if (node.FindDescendant(newParentNodeId) is not null)
+        {
+            return (null, null, Error.Validation(
+                "SchemaNode.CannotReparentUnderDescendant", "A node cannot be moved under one of its own descendants."));
+        }
+
+        var newParent = FindNode(rootNode, localDefinitions, newParentNodeId);
+        if (newParent is null)
+        {
+            return (null, null, Error.NotFound("SchemaNode.ParentNotFound", "No such parent node."));
+        }
+
+        return (node, newParent, null);
+    }
+
+    private static SchemaNode? DetachNode(SchemaNode rootNode, IReadOnlyList<LocalDefinition> localDefinitions, Guid nodeId) =>
+        rootNode.TryDetachDescendant(nodeId)
+        ?? localDefinitions.Select(d => d.RootNode.TryDetachDescendant(nodeId)).FirstOrDefault(n => n is not null);
 
     public static Result RemoveNode(SchemaNode rootNode, IReadOnlyList<LocalDefinition> localDefinitions, Guid nodeId)
     {

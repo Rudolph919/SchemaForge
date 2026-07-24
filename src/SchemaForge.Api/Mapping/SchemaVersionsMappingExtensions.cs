@@ -1,8 +1,10 @@
 using System.Text.Json;
 using SchemaForge.Application.Schemas;
+using SchemaForge.Application.Schemas.Commands.AddLocalDefinition;
 using SchemaForge.Application.Schemas.Commands.AddSchemaNode;
 using SchemaForge.Application.Schemas.Commands.CreateSchemaVersion;
 using SchemaForge.Application.Schemas.Commands.MoveSchemaNode;
+using SchemaForge.Application.Schemas.Commands.ReparentSchemaNode;
 using SchemaForge.Application.Schemas.Queries.GetSchemaVersion;
 using SchemaForge.Contracts.V1.Schemas;
 using SchemaForge.Domain.Schemas;
@@ -47,6 +49,15 @@ public static class SchemaVersionsMappingExtensions
 
     public static MoveSchemaNodeCommand ToCommand(this MoveSchemaNodeRequest request, Guid schemaVersionId, Guid nodeId) =>
         new(schemaVersionId, nodeId, request.NewOrder);
+
+    public static ReparentSchemaNodeCommand ToReparentCommand(
+        this MoveSchemaNodeRequest request, Guid schemaVersionId, Guid nodeId, Guid newParentNodeId) =>
+        new(schemaVersionId, nodeId, newParentNodeId, request.AttachmentKind?.ToDomain(), request.PropertyName);
+
+    public static AddLocalDefinitionCommand ToCommand(this AddLocalDefinitionRequest request, Guid schemaVersionId) =>
+        new(schemaVersionId, request.Name, request.RootKind?.ToDomain());
+
+    public static AddLocalDefinitionResponse ToResponse(this AddLocalDefinitionResult result) => new(result.LocalDefinitionId);
 
     public static SchemaDiffResponse ToResponse(this SchemaDiff diff) => new(
         diff.AddedPaths, diff.RemovedPaths, [.. diff.ChangedPaths.Select(c => new SchemaDiffChangeResponse(c.Path, c.Changes))]);

@@ -84,6 +84,84 @@ public sealed class AuthEndpointsTests : IAsyncLifetime
 
         var body = await response.Content.ReadFromJsonAsync<LoginResponse>();
         body!.AccessToken.Should().NotBeNullOrWhiteSpace();
+        body.RefreshToken.Should().NotBeNullOrWhiteSpace();
+    }
+
+    [Fact]
+    public async Task Refreshing_with_a_valid_refresh_token_issues_a_new_token_pair_and_rotates_out_the_old_one()
+    {
+        var registerRequest = NewRegisterRequest();
+        await _client.PostAsJsonAsync("/api/v1/auth/register", registerRequest);
+        var login = await LoginAsync(registerRequest.Email, registerRequest.Password);
+
+        var refreshResponse = await _client.PostAsJsonAsync(
+            "/api/v1/auth/refresh", new RefreshTokenRequest(login.RefreshToken));
+
+        refreshResponse.StatusCode.Should().Be(HttpStatusCode.OK);
+        var refreshed = await refreshResponse.Content.ReadFromJsonAsync<RefreshTokenResponse>();
+        refreshed!.AccessToken.Should().NotBeNullOrWhiteSpace();
+        refreshed.RefreshToken.Should().NotBeNullOrWhiteSpace();
+        refreshed.RefreshToken.Should().NotBe(login.RefreshToken);
+
+        // The old (now rotated-out) refresh token must no longer work.
+        var reuseResponse = await _client.PostAsJsonAsync(
+            "/api/v1/auth/refresh", new RefreshTokenRequest(login.RefreshToken));
+        reuseResponse.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+    }
+
+    [Fact]
+    public async Task Reusing_a_rotated_out_refresh_token_revokes_the_replacement_too()
+    {
+        var registerRequest = NewRegisterRequest();
+        await _client.PostAsJsonAsync("/api/v1/auth/register", registerRequest);
+        var login = await LoginAsync(registerRequest.Email, registerRequest.Password);
+
+        var firstRefreshResponse = await _client.PostAsJsonAsync(
+            "/api/v1/auth/refresh", new RefreshTokenRequest(login.RefreshToken));
+        var firstRefresh = await firstRefreshResponse.Content.ReadFromJsonAsync<RefreshTokenResponse>();
+
+        // Replay the already-rotated-out original token - this looks like the chain has been
+        // compromised, so it should kill the live replacement token too, not just reject the replay.
+        await _client.PostAsJsonAsync("/api/v1/auth/refresh", new RefreshTokenRequest(login.RefreshToken));
+
+        var replacementStillWorksResponse = await _client.PostAsJsonAsync(
+            "/api/v1/auth/refresh", new RefreshTokenRequest(firstRefresh!.RefreshToken));
+
+        replacementStillWorksResponse.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+    }
+
+    [Fact]
+    public async Task Refreshing_with_an_unknown_refresh_token_returns_bad_request()
+    {
+        var response = await _client.PostAsJsonAsync(
+            "/api/v1/auth/refresh", new RefreshTokenRequest("not-a-real-token"));
+
+        response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+    }
+
+    [Fact]
+    public async Task Logging_out_revokes_the_refresh_token()
+    {
+        var registerRequest = NewRegisterRequest();
+        await _client.PostAsJsonAsync("/api/v1/auth/register", registerRequest);
+        var login = await LoginAsync(registerRequest.Email, registerRequest.Password);
+
+        var logoutResponse = await _client.PostAsJsonAsync(
+            "/api/v1/auth/logout", new RefreshTokenRequest(login.RefreshToken));
+        logoutResponse.StatusCode.Should().Be(HttpStatusCode.NoContent);
+
+        var refreshResponse = await _client.PostAsJsonAsync(
+            "/api/v1/auth/refresh", new RefreshTokenRequest(login.RefreshToken));
+        refreshResponse.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+    }
+
+    [Fact]
+    public async Task Logging_out_an_unknown_refresh_token_still_reports_success()
+    {
+        var response = await _client.PostAsJsonAsync(
+            "/api/v1/auth/logout", new RefreshTokenRequest("not-a-real-token"));
+
+        response.StatusCode.Should().Be(HttpStatusCode.NoContent);
     }
 
     [Fact]

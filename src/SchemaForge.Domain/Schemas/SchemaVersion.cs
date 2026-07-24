@@ -148,16 +148,69 @@ public sealed class SchemaVersion : TenantOwnedAggregateRoot<Guid>, IHasRowVersi
         return result;
     }
 
-    // Reorder among existing siblings only (Step 6 §2.4's "move" endpoint) - not reparenting to
-    // a different node. Reparenting would mean detaching from one attachment point and
-    // reattaching at another while preserving the node's id/content, a materially riskier
-    // operation than resequencing a list; scoped out until a real need for it shows up.
+    // Reorder among existing siblings only (Step 6 §2.4's "move" endpoint) - ReparentNodeAs*
+    // below is the counterpart for moving to a different parent.
     public Result MoveNode(Guid nodeId, int newOrder)
     {
         var draftCheck = EnsureDraft();
         if (draftCheck.IsFailure) return draftCheck;
 
         var result = NodeTreeOperations.MoveNode(RootNode, _localDefinitions, nodeId, newOrder);
+        if (result.IsSuccess) RaiseDomainEvent(new SchemaNodeUpdated(Id, nodeId));
+
+        return result;
+    }
+
+    public Result ReparentNodeAsObjectProperty(Guid nodeId, Guid newParentNodeId, string propertyName)
+    {
+        var draftCheck = EnsureDraft();
+        if (draftCheck.IsFailure) return draftCheck;
+
+        var result = NodeTreeOperations.ReparentAsObjectProperty(RootNode, _localDefinitions, nodeId, newParentNodeId, propertyName);
+        if (result.IsSuccess) RaiseDomainEvent(new SchemaNodeUpdated(Id, nodeId));
+
+        return result;
+    }
+
+    public Result ReparentNodeAsArrayPrefixItem(Guid nodeId, Guid newParentNodeId)
+    {
+        var draftCheck = EnsureDraft();
+        if (draftCheck.IsFailure) return draftCheck;
+
+        var result = NodeTreeOperations.ReparentAsArrayPrefixItem(RootNode, _localDefinitions, nodeId, newParentNodeId);
+        if (result.IsSuccess) RaiseDomainEvent(new SchemaNodeUpdated(Id, nodeId));
+
+        return result;
+    }
+
+    public Result ReparentNodeAsArrayItems(Guid nodeId, Guid newParentNodeId)
+    {
+        var draftCheck = EnsureDraft();
+        if (draftCheck.IsFailure) return draftCheck;
+
+        var result = NodeTreeOperations.ReparentAsArrayItems(RootNode, _localDefinitions, nodeId, newParentNodeId);
+        if (result.IsSuccess) RaiseDomainEvent(new SchemaNodeUpdated(Id, nodeId));
+
+        return result;
+    }
+
+    public Result ReparentNodeAsCompositionBranch(Guid nodeId, Guid newParentNodeId)
+    {
+        var draftCheck = EnsureDraft();
+        if (draftCheck.IsFailure) return draftCheck;
+
+        var result = NodeTreeOperations.ReparentAsCompositionBranch(RootNode, _localDefinitions, nodeId, newParentNodeId);
+        if (result.IsSuccess) RaiseDomainEvent(new SchemaNodeUpdated(Id, nodeId));
+
+        return result;
+    }
+
+    public Result ReparentNodeAsConditionalNode(Guid nodeId, Guid newParentNodeId, ConditionalSlot slot)
+    {
+        var draftCheck = EnsureDraft();
+        if (draftCheck.IsFailure) return draftCheck;
+
+        var result = NodeTreeOperations.ReparentAsConditionalNode(RootNode, _localDefinitions, nodeId, newParentNodeId, slot);
         if (result.IsSuccess) RaiseDomainEvent(new SchemaNodeUpdated(Id, nodeId));
 
         return result;
@@ -179,7 +232,10 @@ public sealed class SchemaVersion : TenantOwnedAggregateRoot<Guid>, IHasRowVersi
         var draftCheck = EnsureDraft();
         if (draftCheck.IsFailure) return Result<Guid>.Failure(draftCheck.Error);
 
-        return NodeTreeOperations.AddLocalDefinition(_localDefinitions, name, rootKind);
+        var result = NodeTreeOperations.AddLocalDefinition(_localDefinitions, name, rootKind);
+        if (result.IsSuccess) RaiseDomainEvent(new LocalDefinitionAdded(Id, result.Value, name));
+
+        return result;
     }
 
     public Result RemoveLocalDefinition(Guid localDefinitionId)
@@ -187,7 +243,10 @@ public sealed class SchemaVersion : TenantOwnedAggregateRoot<Guid>, IHasRowVersi
         var draftCheck = EnsureDraft();
         if (draftCheck.IsFailure) return draftCheck;
 
-        return NodeTreeOperations.RemoveLocalDefinition(_localDefinitions, localDefinitionId);
+        var result = NodeTreeOperations.RemoveLocalDefinition(_localDefinitions, localDefinitionId);
+        if (result.IsSuccess) RaiseDomainEvent(new LocalDefinitionRemoved(Id, localDefinitionId));
+
+        return result;
     }
 
     private Result EnsureDraft() => Status == SchemaLifecycleStatus.Draft

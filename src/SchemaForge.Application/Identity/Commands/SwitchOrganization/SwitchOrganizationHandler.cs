@@ -1,6 +1,8 @@
+using System.Security.Cryptography;
 using MediatR;
 using SchemaForge.Application.Common.Abstractions;
 using SchemaForge.Application.Organizations;
+using SchemaForge.Domain.Identity;
 using SchemaForge.Domain.Organizations;
 using SchemaForge.SharedKernel;
 
@@ -9,12 +11,14 @@ namespace SchemaForge.Application.Identity.Commands.SwitchOrganization;
 public sealed class SwitchOrganizationHandler(
     IUserRepository userRepository,
     IOrganizationMembershipRepository membershipRepository,
+    IRefreshTokenRepository refreshTokenRepository,
+    IRefreshTokenHasher refreshTokenHasher,
     ICurrentUserContext currentUserContext,
     IJwtTokenService jwtTokenService)
-    : IRequestHandler<SwitchOrganizationQuery, Result<SwitchOrganizationResult>>
+    : IRequestHandler<SwitchOrganizationCommand, Result<SwitchOrganizationResult>>
 {
     public async Task<Result<SwitchOrganizationResult>> Handle(
-        SwitchOrganizationQuery request, CancellationToken cancellationToken)
+        SwitchOrganizationCommand request, CancellationToken cancellationToken)
     {
         var userId = currentUserContext.UserId!.Value;
 
@@ -35,6 +39,15 @@ public sealed class SwitchOrganizationHandler(
         var user = await userRepository.GetByIdAsync(userId, cancellationToken);
         var accessToken = jwtTokenService.GenerateAccessToken(user!, targetMembership.OrganizationId, targetMembership.Role);
 
-        return new SwitchOrganizationResult(accessToken, targetMembership.OrganizationId, user!.DisplayName);
+        // A fresh refresh token scoped to the newly-active org - the one the caller arrived with
+        // still points at their previous org and is left alone; it stays valid until it naturally
+        // expires, which is no more than the caller could achieve by just switching back.
+        var rawRefreshToken = RandomNumberGenerator.GetHexString(64);
+        var refreshToken = RefreshToken.Issue(
+            user!.Id, targetMembership.OrganizationId, refreshTokenHasher.Hash(rawRefreshToken));
+        await refreshTokenRepository.AddAsync(refreshToken, cancellationToken);
+
+        return new SwitchOrganizationResult(
+            accessToken, rawRefreshToken, targetMembership.OrganizationId, user.DisplayName);
     }
 }

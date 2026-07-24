@@ -7,6 +7,7 @@ import SuggestedNodeTree from '@/modules/schemas/components/SuggestedNodeTree.vu
 import { testSuitesApi } from '@/modules/testing/api/testSuitesApi'
 import { documentsApi } from '@/modules/workspaces/api/documentsApi'
 import { ApiError } from '@/shared/api/httpClient'
+import { useIdempotencyKey, useIdempotencyKeyMap } from '@/shared/api/idempotencyKey'
 import Modal from '@/shared/components/Modal.vue'
 import type { SchemaDefinitionDetailResponse, SchemaSuggestionResponse, SchemaVersionSummaryResponse, VersionBumpKind } from '@/types/schemas'
 import type { TestSuiteSummaryResponse } from '@/types/testing'
@@ -17,6 +18,7 @@ const router = useRouter()
 const schemaId = computed(() => route.params.schemaId as string)
 
 const schema = ref<SchemaDefinitionDetailResponse | null>(null)
+const schemaETag = ref<string | null>(null)
 const versions = ref<SchemaVersionSummaryResponse[]>([])
 const loadError = ref<string | null>(null)
 
@@ -31,6 +33,9 @@ const newVersionBumpKind = ref<VersionBumpKind>('Minor')
 const newVersionSummary = ref('')
 const versionError = ref<string | null>(null)
 const isCreatingVersion = ref(false)
+const createVersionKey = useIdempotencyKey()
+const publishKeys = useIdempotencyKeyMap()
+const deprecateKeys = useIdempotencyKeyMap()
 
 const hasDraft = computed(() => versions.value.some((v) => v.status === 'Draft'))
 
@@ -39,6 +44,7 @@ const newSuiteName = ref('')
 const newSuiteDescription = ref('')
 const suiteError = ref<string | null>(null)
 const isCreatingSuite = ref(false)
+const createSuiteKey = useIdempotencyKey()
 
 async function load() {
   loadError.value = null
@@ -48,7 +54,8 @@ async function load() {
       schemaVersionsApi.listVersions(schemaId.value),
       testSuitesApi.listSuites(schemaId.value),
     ])
-    schema.value = schemaResponse
+    schema.value = schemaResponse.data
+    schemaETag.value = schemaResponse.etag
     versions.value = versionsResponse
     testSuites.value = testSuitesResponse
   } catch (error) {
@@ -60,10 +67,12 @@ async function handleCreateSuite() {
   suiteError.value = null
   isCreatingSuite.value = true
   try {
-    await testSuitesApi.createSuite(schemaId.value, {
-      name: newSuiteName.value,
-      description: newSuiteDescription.value || null,
-    })
+    await testSuitesApi.createSuite(
+      schemaId.value,
+      { name: newSuiteName.value, description: newSuiteDescription.value || null },
+      createSuiteKey.get(),
+    )
+    createSuiteKey.reset()
     newSuiteName.value = ''
     newSuiteDescription.value = ''
     await load()
@@ -85,6 +94,11 @@ function startEditing() {
 
 async function handleSaveDetails() {
   editError.value = null
+  if (!schemaETag.value) {
+    editError.value = 'Missing schema ETag - reloading before saving.'
+    await load()
+    return
+  }
   isSaving.value = true
   try {
     const tags = editTags.value
@@ -92,15 +106,20 @@ async function handleSaveDetails() {
       .map((t) => t.trim())
       .filter((t) => t.length > 0)
 
-    await schemaDefinitionsApi.updateSchemaDetails(schemaId.value, {
-      name: editName.value,
-      description: editDescription.value || null,
-      tags,
-    })
+    await schemaDefinitionsApi.updateSchemaDetails(
+      schemaId.value,
+      { name: editName.value, description: editDescription.value || null, tags },
+      schemaETag.value,
+    )
     isEditing.value = false
     await load()
   } catch (error) {
-    editError.value = error instanceof ApiError ? error.message : 'Could not save changes.'
+    if (error instanceof ApiError && error.status === 409) {
+      editError.value = 'This schema changed elsewhere. Reloaded the latest version - please redo your edit.'
+      await load()
+    } else {
+      editError.value = error instanceof ApiError ? error.message : 'Could not save changes.'
+    }
   } finally {
     isSaving.value = false
   }
@@ -110,10 +129,12 @@ async function handleCreateVersion() {
   versionError.value = null
   isCreatingVersion.value = true
   try {
-    await schemaVersionsApi.createVersion(schemaId.value, {
-      bumpKind: newVersionBumpKind.value,
-      changeSummary: newVersionSummary.value || null,
-    })
+    await schemaVersionsApi.createVersion(
+      schemaId.value,
+      { bumpKind: newVersionBumpKind.value, changeSummary: newVersionSummary.value || null },
+      createVersionKey.get(),
+    )
+    createVersionKey.reset()
     newVersionSummary.value = ''
     await load()
   } catch (error) {
@@ -126,7 +147,8 @@ async function handleCreateVersion() {
 async function handlePublish(versionId: string) {
   versionError.value = null
   try {
-    await schemaVersionsApi.publish(versionId)
+    await schemaVersionsApi.publish(versionId, publishKeys.get(versionId))
+    publishKeys.reset(versionId)
     await load()
   } catch (error) {
     versionError.value = error instanceof ApiError ? error.message : 'Could not publish version.'
@@ -136,7 +158,8 @@ async function handlePublish(versionId: string) {
 async function handleDeprecate(versionId: string) {
   versionError.value = null
   try {
-    await schemaVersionsApi.deprecate(versionId)
+    await schemaVersionsApi.deprecate(versionId, deprecateKeys.get(versionId))
+    deprecateKeys.reset(versionId)
     await load()
   } catch (error) {
     versionError.value = error instanceof ApiError ? error.message : 'Could not deprecate version.'
@@ -150,12 +173,14 @@ const importBumpKind = ref<VersionBumpKind>('Minor')
 const importSummary = ref('')
 const importError = ref<string | null>(null)
 const isImporting = ref(false)
+const importSchemaKey = useIdempotencyKey()
 
 function openImport() {
   importDocumentText.value = ''
   importBumpKind.value = 'Minor'
   importSummary.value = ''
   importError.value = null
+  importSchemaKey.reset()
   isImportOpen.value = true
 }
 
@@ -171,7 +196,14 @@ async function handleImport() {
   importError.value = null
   isImporting.value = true
   try {
-    await schemaVersionsApi.importSchema(schemaId.value, document, importBumpKind.value, importSummary.value || null)
+    await schemaVersionsApi.importSchema(
+      schemaId.value,
+      document,
+      importBumpKind.value,
+      importSummary.value || null,
+      importSchemaKey.get(),
+    )
+    importSchemaKey.reset()
     isImportOpen.value = false
     await load()
   } catch (error) {
@@ -193,6 +225,7 @@ const suggestSummary = ref('')
 const suggestError = ref<string | null>(null)
 const isSuggesting = ref(false)
 const isCreatingDraftFromSuggestion = ref(false)
+const createDraftFromSuggestionKey = useIdempotencyKey()
 
 async function openSuggest() {
   if (!schema.value) return
@@ -202,6 +235,7 @@ async function openSuggest() {
   suggestSummary.value = ''
   suggestError.value = null
   suggestDocumentsError.value = null
+  createDraftFromSuggestionKey.reset()
   isSuggestOpen.value = true
 
   try {
@@ -216,6 +250,18 @@ function collectNodeIds(nodes: SchemaSuggestionResponse['nodes'], into: Set<stri
     into.add(node.id)
     collectNodeIds(node.children, into)
   }
+}
+
+function findSuggestedNode(
+  nodes: SchemaSuggestionResponse['nodes'],
+  nodeId: string,
+): SchemaSuggestionResponse['nodes'][number] | null {
+  for (const node of nodes) {
+    if (node.id === nodeId) return node
+    const found = findSuggestedNode(node.children, nodeId)
+    if (found) return found
+  }
+  return null
 }
 
 async function handleGenerateSuggestion() {
@@ -236,9 +282,21 @@ async function handleGenerateSuggestion() {
 }
 
 function toggleAccepted(nodeId: string) {
+  if (!suggestion.value) return
   const next = new Set(acceptedNodeIds.value)
   if (next.has(nodeId)) {
+    // Rejecting a node also rejects its whole subtree - a rejected node has no attachment
+    // point for its children once materialized, and SuggestedNodeTree.vue already disables
+    // (but doesn't un-check) descendant checkboxes to reflect that. Without this cascade the
+    // still-checked descendants get submitted anyway, and CreateDraftFromSuggestion rejects
+    // the whole request with SchemaNode.NotAnObject.
     next.delete(nodeId)
+    const node = findSuggestedNode(suggestion.value.nodes, nodeId)
+    if (node) {
+      const descendantIds = new Set<string>()
+      collectNodeIds(node.children, descendantIds)
+      for (const id of descendantIds) next.delete(id)
+    }
   } else {
     next.add(nodeId)
   }
@@ -250,12 +308,17 @@ async function handleCreateDraftFromSuggestion() {
   suggestError.value = null
   isCreatingDraftFromSuggestion.value = true
   try {
-    await schemaVersionsApi.createDraftFromSuggestion(schemaId.value, {
-      suggestion: suggestion.value,
-      acceptedNodeIds: [...acceptedNodeIds.value],
-      bumpKind: suggestBumpKind.value,
-      changeSummary: suggestSummary.value || null,
-    })
+    await schemaVersionsApi.createDraftFromSuggestion(
+      schemaId.value,
+      {
+        suggestion: suggestion.value,
+        acceptedNodeIds: [...acceptedNodeIds.value],
+        bumpKind: suggestBumpKind.value,
+        changeSummary: suggestSummary.value || null,
+      },
+      createDraftFromSuggestionKey.get(),
+    )
+    createDraftFromSuggestionKey.reset()
     isSuggestOpen.value = false
     await load()
   } catch (error) {

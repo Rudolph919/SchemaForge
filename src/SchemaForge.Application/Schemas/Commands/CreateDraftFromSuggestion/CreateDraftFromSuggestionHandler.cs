@@ -55,7 +55,7 @@ public sealed class CreateDraftFromSuggestionHandler(
         var acceptedCount = 0;
         foreach (var node in request.Suggestion.Nodes)
         {
-            var result = AddAcceptedSubtree(version, version.RootNode.Id, node, acceptedIds, ref acceptedCount);
+            var result = AddAcceptedSubtree(version, version.RootNode.Id, NodeKind.Object, node, acceptedIds, ref acceptedCount);
             if (result.IsFailure)
             {
                 return Result<CreateDraftFromSuggestionResult>.Failure(result.Error);
@@ -69,15 +69,25 @@ public sealed class CreateDraftFromSuggestionHandler(
 
     // A rejected node's children are pruned along with it - there's no accepted parent left in
     // the resulting version for them to attach to.
+    //
+    // parentKind decides how node attaches: an Object parent gets node as a named property
+    // (the common case - and the only one a flat SuggestedNode, with no composition/conditional
+    // slot of its own, can represent), while an Array parent gets node as its single items
+    // schema instead - AddObjectProperty rejects a non-Object parent outright
+    // (SchemaNode.NotAnObject), which is exactly what an Array-typed suggested node (e.g. an
+    // "items" property) with children hit before this parentKind branch existed.
     private static Result AddAcceptedSubtree(
-        SchemaVersion version, Guid parentNodeId, SuggestedNode node, HashSet<Guid> acceptedIds, ref int acceptedCount)
+        SchemaVersion version, Guid parentNodeId, NodeKind parentKind, SuggestedNode node, HashSet<Guid> acceptedIds,
+        ref int acceptedCount)
     {
         if (!acceptedIds.Contains(node.Id))
         {
             return Result.Success();
         }
 
-        var addResult = version.AddObjectProperty(parentNodeId, node.PropertyName ?? "field", node.Kind);
+        var addResult = parentKind == NodeKind.Array
+            ? version.SetArrayItemsNode(parentNodeId, node.Kind)
+            : version.AddObjectProperty(parentNodeId, node.PropertyName ?? "field", node.Kind);
         if (addResult.IsFailure)
         {
             return Result.Failure(addResult.Error);
@@ -97,7 +107,7 @@ public sealed class CreateDraftFromSuggestionHandler(
 
         foreach (var child in node.Children)
         {
-            var childResult = AddAcceptedSubtree(version, newNodeId, child, acceptedIds, ref acceptedCount);
+            var childResult = AddAcceptedSubtree(version, newNodeId, node.Kind, child, acceptedIds, ref acceptedCount);
             if (childResult.IsFailure)
             {
                 return childResult;

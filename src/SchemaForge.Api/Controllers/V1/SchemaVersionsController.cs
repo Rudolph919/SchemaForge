@@ -5,6 +5,7 @@ using Microsoft.AspNetCore.Mvc;
 using SchemaForge.Api.Common;
 using SchemaForge.Api.Mapping;
 using SchemaForge.Api.Middleware;
+using SchemaForge.Application.Schemas.Commands.AddLocalDefinition;
 using SchemaForge.Application.Schemas.Commands.AddSchemaNode;
 using SchemaForge.Application.Schemas.Commands.CreateDraftFromSuggestion;
 using SchemaForge.Application.Schemas.Commands.CreateSchemaVersion;
@@ -12,7 +13,9 @@ using SchemaForge.Application.Schemas.Commands.DeprecateSchemaVersion;
 using SchemaForge.Application.Schemas.Commands.ImportSchemaVersion;
 using SchemaForge.Application.Schemas.Commands.MoveSchemaNode;
 using SchemaForge.Application.Schemas.Commands.PublishSchemaVersion;
+using SchemaForge.Application.Schemas.Commands.RemoveLocalDefinition;
 using SchemaForge.Application.Schemas.Commands.RemoveSchemaNode;
+using SchemaForge.Application.Schemas.Commands.ReparentSchemaNode;
 using SchemaForge.Application.Schemas.Commands.UpdateSchemaNode;
 using SchemaForge.Application.Schemas.Queries.GetSchemaDiff;
 using SchemaForge.Application.Schemas.Queries.GetSchemaVersion;
@@ -118,12 +121,41 @@ public sealed class SchemaVersionsController(ISender sender) : ControllerBase
         return result.ToActionResult();
     }
 
-    // Reorders among existing siblings only - reparenting to a different node is a materially
-    // riskier operation deferred out of Phase 2a (SchemaVersion.MoveNode's own scope note).
+    [HttpPost("api/v1/schema-versions/{schemaVersionId:guid}/local-definitions")]
+    public async Task<IActionResult> AddLocalDefinition(
+        Guid schemaVersionId, AddLocalDefinitionRequest request, CancellationToken cancellationToken)
+    {
+        var result = await sender.Send(request.ToCommand(schemaVersionId), cancellationToken);
+        return result.ToActionResult(r => r.ToResponse());
+    }
+
+    [HttpDelete("api/v1/schema-versions/{schemaVersionId:guid}/local-definitions/{localDefinitionId:guid}")]
+    public async Task<IActionResult> RemoveLocalDefinition(
+        Guid schemaVersionId, Guid localDefinitionId, CancellationToken cancellationToken)
+    {
+        if (!Request.TryGetIfMatch(out var expectedVersion))
+        {
+            return ConcurrencyExtensions.PreconditionRequired();
+        }
+
+        var result = await sender.Send(
+            new RemoveLocalDefinitionCommand(schemaVersionId, localDefinitionId, expectedVersion), cancellationToken);
+        return result.ToActionResult();
+    }
+
+    // NewParentNodeId absent: plain reorder among existing siblings. Present: reparent to a
+    // different node instead (MoveSchemaNodeRequest's own doc comment).
     [HttpPost("api/v1/schema-versions/{schemaVersionId:guid}/nodes/{nodeId:guid}/move")]
     public async Task<IActionResult> MoveNode(
         Guid schemaVersionId, Guid nodeId, MoveSchemaNodeRequest request, CancellationToken cancellationToken)
     {
+        if (request.NewParentNodeId is { } newParentNodeId)
+        {
+            var reparentResult = await sender.Send(
+                request.ToReparentCommand(schemaVersionId, nodeId, newParentNodeId), cancellationToken);
+            return reparentResult.ToActionResult();
+        }
+
         var result = await sender.Send(request.ToCommand(schemaVersionId, nodeId), cancellationToken);
         return result.ToActionResult();
     }

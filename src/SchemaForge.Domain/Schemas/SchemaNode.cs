@@ -117,6 +117,13 @@ public sealed class SchemaNode : Entity<Guid>
 
     internal void Reorder(int newOrder) => Order = newOrder;
 
+    // Only meaningful when reparenting under a different attachment kind (Step 6 §2.4's
+    // reparent extension) - a node moved into a non-ObjectProperty slot (array items, a
+    // composition branch, a conditional slot) has no property name, the same as one created
+    // fresh at that slot via AddArrayPrefixItem/SetArrayItemsNode/AddCompositionBranch/
+    // SetConditionalNode all passing null.
+    internal void Rename(string? propertyName) => PropertyName = propertyName;
+
     internal void AddProperty(SchemaNode child) => _properties.Add(child);
 
     internal bool RemoveProperty(Guid childId) => _properties.RemoveAll(n => n.Id == childId) > 0;
@@ -203,5 +210,48 @@ public sealed class SchemaNode : Entity<Guid>
         if (ElseNode?.TryRemoveDescendant(childId) == true) return true;
 
         return false;
+    }
+
+    // Same walk as TryRemoveDirectChild, but returns the detached node instead of discarding it -
+    // reparenting (Step 6 §2.4's reparent extension) needs the actual instance back so it can be
+    // re-attached elsewhere with its id/content untouched, not just confirmation it was removed.
+    private SchemaNode? TryDetachDirectChild(Guid childId)
+    {
+        var property = _properties.FirstOrDefault(n => n.Id == childId);
+        if (property is not null) { _properties.Remove(property); return property; }
+
+        var prefixItem = _prefixItems.FirstOrDefault(n => n.Id == childId);
+        if (prefixItem is not null) { _prefixItems.Remove(prefixItem); return prefixItem; }
+
+        var branch = _compositionBranches.FirstOrDefault(n => n.Id == childId);
+        if (branch is not null) { _compositionBranches.Remove(branch); return branch; }
+
+        if (ItemsNode?.Id == childId) { var node = ItemsNode; ItemsNode = null; return node; }
+        if (IfNode?.Id == childId) { var node = IfNode; IfNode = null; return node; }
+        if (ThenNode?.Id == childId) { var node = ThenNode; ThenNode = null; return node; }
+        if (ElseNode?.Id == childId) { var node = ElseNode; ElseNode = null; return node; }
+
+        return null;
+    }
+
+    // Depth-first equivalent of TryRemoveDescendant - used by ReparentNode, which needs to pull
+    // the node out of wherever it currently lives before reattaching it under its new parent.
+    internal SchemaNode? TryDetachDescendant(Guid childId)
+    {
+        var direct = TryDetachDirectChild(childId);
+        if (direct is not null) return direct;
+
+        foreach (var child in _properties.Concat(_prefixItems).Concat(_compositionBranches))
+        {
+            var found = child.TryDetachDescendant(childId);
+            if (found is not null) return found;
+        }
+
+        if (ItemsNode?.TryDetachDescendant(childId) is { } inItems) return inItems;
+        if (IfNode?.TryDetachDescendant(childId) is { } inIf) return inIf;
+        if (ThenNode?.TryDetachDescendant(childId) is { } inThen) return inThen;
+        if (ElseNode?.TryDetachDescendant(childId) is { } inElse) return inElse;
+
+        return null;
     }
 }
