@@ -40,3 +40,8 @@ TestResults/
 
 # Docker
 .docker/
+
+# AI / editor tooling (local only)
+.claude/
+.cursor/
+.codex/

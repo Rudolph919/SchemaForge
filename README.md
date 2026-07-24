@@ -1,5 +1,9 @@
 # SchemaForge
 
+[![CI](https://github.com/Rudolph919/SchemaForge/actions/workflows/ci.yml/badge.svg)](https://github.com/Rudolph919/SchemaForge/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+[![.NET](https://img.shields.io/badge/.NET-10.0-512BD4?logo=dotnet&logoColor=white)](global.json)
+
 Enterprise JSON Schema Design, Validation & API Contract Platform — a multi-tenant SaaS for designing, versioning, testing, and publishing JSON Schemas through a visual editor, backed by a .NET 10 Clean Architecture API and a Vue 3 frontend.
 
 Built as a portfolio project to demonstrate enterprise-grade backend design: strict layering enforced by architecture tests, CQRS via MediatR, dual-layer multi-tenancy (EF Core global query filters + Postgres row-level security), optimistic concurrency, idempotent writes, and a swappable AI-suggestion seam — not just CRUD over a database.
@@ -31,7 +35,7 @@ The full architecture design (10 documents, written and approved before any code
 Prerequisites: [.NET 10 SDK](https://dotnet.microsoft.com/download) (pinned in [`global.json`](global.json)), [Node.js](https://nodejs.org/) 20+, Docker.
 
 ```bash
-git clone <this-repo>
+git clone https://github.com/Rudolph919/SchemaForge.git
 cd SchemaForge
 cp .env.example .env   # defaults are fine for local dev
 ```
